@@ -247,7 +247,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
             }}
           >
             <div 
-              className="relative w-full h-full max-w-full sm:max-w-md md:max-w-lg mx-auto bg-black flex items-center justify-center p-2" 
+              className="relative w-full h-full max-w-xs sm:max-w-sm md:max-w-md mx-auto bg-black rounded-lg overflow-hidden flex items-center justify-center p-4" 
               style={{ aspectRatio: '9/16' }}
             >
               <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
@@ -255,7 +255,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                 <video
                   ref={el => { videoRefs.current[index] = el }}
                   data-index={index}
-                  className="w-full h-full object-contain"
+                  className="w-full h-full object-cover rounded-lg"
                   poster={video.thumbnailUrl}
                   controls={false}
                   playsInline
