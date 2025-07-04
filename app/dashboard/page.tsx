@@ -38,14 +38,15 @@ export default function Dashboard() {
             style={{ aspectRatio: '9 / 16' }}
           >
             <div className="relative w-full h-full">
-              <video
-                className="w-full h-full object-cover"
-                src="/api/videos/luxury?page=1&limit=1&shuffle=true&timestamp=1"
-                autoPlay
-                loop
-                muted
-                playsInline
-                poster="/video-placeholder.png" 
+              <div 
+                className="w-full h-full bg-cover bg-center"
+                style={{
+                  backgroundImage: `linear-gradient(135deg, 
+                    rgba(147, 51, 234, 0.7) 0%, 
+                    rgba(79, 70, 229, 0.7) 50%, 
+                    rgba(67, 56, 202, 0.7) 100%),
+                    url('/video-placeholder.png')`
+                }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
