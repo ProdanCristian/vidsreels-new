@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
+    "vercel-build": "prisma generate && next build",
     "generate-thumbnails": "node scripts/generate-thumbnails.js",
     "delete-thumbnails": "node scripts/delete-cloudflare-images.js",
     "upload-thumbnails": "node scripts/upload-thumbnails.js"

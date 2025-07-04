@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Major+Mono+Display&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -88,12 +87,7 @@
   }
 }
 
-/* Major Mono Display Font */
-.major-mono-display-regular {
-  font-family: "Major Mono Display", monospace;
-  font-weight: 400;
-  font-style: normal;
-}
+
 
 
 
