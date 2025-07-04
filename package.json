@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "postinstall": "prisma generate",
     "generate-thumbnails": "node scripts/generate-thumbnails.js",
     "delete-thumbnails": "node scripts/delete-cloudflare-images.js",
     "upload-thumbnails": "node scripts/upload-thumbnails.js"

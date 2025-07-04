@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Download, Play, Volume2, VolumeX, Pause } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -111,14 +112,14 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
               onClick={() => togglePlayPause(index)}
             >
               {/* Thumbnail Image */}
-              <img
+              <Image
                 src={getThumbnailUrl(video.key)}
                 alt={video.name}
+                fill
                 className={cn(
-                  'w-full h-full object-cover transition-opacity duration-300 ease-in-out group-hover:scale-105',
+                  'object-cover transition-opacity duration-300 ease-in-out group-hover:scale-105',
                   isPlaying[index] ? 'opacity-0' : 'opacity-100'
                 )}
-                loading="lazy"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = '/video-placeholder.png';
                 }}
