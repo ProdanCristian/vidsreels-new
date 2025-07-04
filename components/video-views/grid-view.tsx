@@ -67,7 +67,17 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
 
   const togglePlayPause = (index: number) => {
     const newIsPlaying = [...isPlaying]
-    newIsPlaying[index] = !newIsPlaying[index]
+    
+    // If we're starting to play this video, pause all others
+    if (!newIsPlaying[index]) {
+      // Pause all other videos
+      newIsPlaying.fill(false)
+      newIsPlaying[index] = true
+    } else {
+      // If we're pausing this video, just pause it
+      newIsPlaying[index] = false
+    }
+    
     setIsPlaying(newIsPlaying)
   }
 

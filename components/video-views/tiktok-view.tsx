@@ -49,9 +49,13 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
   const [manuallyPaused, setManuallyPaused] = useState<Record<number, boolean>>({})
   const retryAttemptsRef = useRef<Record<number, number>>({})
+  const scrollIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const scrollIndicatorHideTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMoreVideos, setHasMoreVideos] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false)
+  const [hasUserScrolled, setHasUserScrolled] = useState(false)
 
   const fetcher = useCallback(async (url: string): Promise<VideoResponse> => {
     const response = await fetch(url)
@@ -82,6 +86,17 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setHasMoreVideos(true)
       setPlayingStates({})
       setManuallyPaused({})
+      setHasUserScrolled(false)
+      setShowScrollIndicator(false)
+      // Clear any pending timeouts
+      if (scrollIndicatorTimeoutRef.current) {
+        clearTimeout(scrollIndicatorTimeoutRef.current)
+        scrollIndicatorTimeoutRef.current = null
+      }
+      if (scrollIndicatorHideTimeoutRef.current) {
+        clearTimeout(scrollIndicatorHideTimeoutRef.current)
+        scrollIndicatorHideTimeoutRef.current = null
+      }
     }
   }, [isShuffled])
 
@@ -109,6 +124,24 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       })
     )
     
+    // Automatically unmute audio when playing the first video
+    if (index === 0 && globalMuted) {
+      setGlobalMuted(false)
+    }
+    
+    // Show scroll indicator after first video starts playing
+    if (index === 0 && !hasUserScrolled) {
+      scrollIndicatorTimeoutRef.current = setTimeout(() => {
+        if (!hasUserScrolled) {
+          setShowScrollIndicator(true)
+          // Hide indicator after 4 seconds
+          scrollIndicatorHideTimeoutRef.current = setTimeout(() => {
+            setShowScrollIndicator(false)
+          }, 4000)
+        }
+      }, 1000)
+    }
+    
     try {
       const playPromise = video.play()
       playPromisesRef.current[index] = playPromise
@@ -118,7 +151,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     } finally {
       playPromisesRef.current[index] = null
     }
-  }, [safePause])
+  }, [safePause, globalMuted, hasUserScrolled])
 
   const togglePlayPause = useCallback(async (index: number) => {
     const video = videoRefs.current[index]
@@ -139,7 +172,10 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     
     const video = videoRefs.current[currentVideoIndex]
     if (video && video.paused) {
-      playVideo(currentVideoIndex)
+      // Small delay to ensure video is ready
+      setTimeout(() => {
+        playVideo(currentVideoIndex)
+      }, 100)
     }
   }, [currentVideoIndex, manuallyPaused, playVideo])
 
@@ -167,6 +203,66 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
 
     return () => observerRef.current?.disconnect()
   }, [allVideos.length])
+
+  // Scroll listener to hide indicator when user scrolls
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      if (!hasUserScrolled) {
+        setHasUserScrolled(true)
+        setShowScrollIndicator(false)
+        // Clear any pending timeouts
+        if (scrollIndicatorTimeoutRef.current) {
+          clearTimeout(scrollIndicatorTimeoutRef.current)
+          scrollIndicatorTimeoutRef.current = null
+        }
+        if (scrollIndicatorHideTimeoutRef.current) {
+          clearTimeout(scrollIndicatorHideTimeoutRef.current)
+          scrollIndicatorHideTimeoutRef.current = null
+        }
+      }
+    }
+
+    const handleTouchStart = () => {
+      if (!hasUserScrolled) {
+        setHasUserScrolled(true)
+        setShowScrollIndicator(false)
+        // Clear any pending timeouts
+        if (scrollIndicatorTimeoutRef.current) {
+          clearTimeout(scrollIndicatorTimeoutRef.current)
+          scrollIndicatorTimeoutRef.current = null
+        }
+        if (scrollIndicatorHideTimeoutRef.current) {
+          clearTimeout(scrollIndicatorHideTimeoutRef.current)
+          scrollIndicatorHideTimeoutRef.current = null
+        }
+      }
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    container.addEventListener('touchstart', handleTouchStart, { passive: true })
+    container.addEventListener('touchmove', handleTouchStart, { passive: true })
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchStart)
+    }
+  }, [hasUserScrolled])
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollIndicatorTimeoutRef.current) {
+        clearTimeout(scrollIndicatorTimeoutRef.current)
+      }
+      if (scrollIndicatorHideTimeoutRef.current) {
+        clearTimeout(scrollIndicatorHideTimeoutRef.current)
+      }
+    }
+  }, [])
   
   const loadMoreVideos = useCallback(async () => {
     if (isLoadingMoreRef.current || !hasMoreVideos) return
@@ -247,7 +343,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
             }}
           >
             <div 
-              className="relative w-full h-full max-w-xs sm:max-w-sm md:max-w-md mx-auto bg-black rounded-lg overflow-hidden flex items-center justify-center p-4" 
+              className="relative w-full h-full max-w-sm max-h-[680px] mx-auto bg-black rounded-lg overflow-hidden flex items-center justify-center p-4 lg:p-2 xl:p-1" 
               style={{ aspectRatio: '9/16' }}
             >
               <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
@@ -261,7 +357,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                   playsInline
                   loop
                   muted={globalMuted}
-                  preload="metadata"
+                  preload="auto"
                   crossOrigin="anonymous"
                   onClick={() => togglePlayPause(index)}
                   onPlay={() => setPlayingStates(prev => ({ ...prev, [index]: true }))}
@@ -286,7 +382,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
               )}
 
               {/* Play/Pause Button */}
-              {!playingStates[index] && !loadingVideos[index] && !failedVideos[index] && (
+              {!playingStates[index] && !loadingVideos[index] && !failedVideos[index] && (index === 0 || manuallyPaused[index]) && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <Button
                     variant="ghost"
@@ -329,6 +425,41 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       })}
       
       <div ref={loadMoreRef} className="h-20" />
+
+      {/* Scroll Indicator */}
+      {showScrollIndicator && (
+        <div className="fixed left-1/2 bottom-20 transform -translate-x-1/2 z-40 pointer-events-none">
+          <div className="flex items-center justify-center px-3 py-2 bg-black/40 backdrop-blur-sm rounded-2xl border border-white/20">
+            <div className="relative w-0.5 h-12 bg-white/30 rounded-full overflow-hidden">
+              <div 
+                className="absolute w-full h-6 bg-gradient-to-t from-white to-white/60 rounded-full"
+                style={{ 
+                  animation: 'slideUp 2s ease-in-out infinite 0.5s',
+                }} 
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes slideUp {
+            0% {
+              transform: translateY(100%);
+              opacity: 0;
+            }
+            50% {
+              transform: translateY(-50%);
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(-200%);
+              opacity: 0;
+            }
+          }
+        `
+      }} />
 
       {(isLoading || isLoadingMore) && (
         <div className="w-full h-full absolute inset-0 flex items-center justify-center bg-black/50 z-50 pointer-events-none">
