@@ -134,7 +134,7 @@ export default function CollectionPage() {
             variant="ghost"
             size="sm"
             onClick={() => setCurrentView('tiktok')}
-            className={`rounded-full w-8 h-8 p-0 transition-all duration-200 ${
+            className={`cursor-pointer rounded-full w-8 h-8 p-0 transition-all duration-200 ${
               currentView === 'tiktok' 
                 ? 'bg-white text-black shadow-sm' 
                 : 'text-white/70 hover:text-white hover:bg-white/10'

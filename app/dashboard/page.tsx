@@ -2,8 +2,6 @@
 
 import { useRouter } from "next/navigation"
 import DashboardHeader from "@/components/dashboard-header"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Play, Crown } from "lucide-react"
 
 export default function Dashboard() {
@@ -32,47 +30,82 @@ export default function Dashboard() {
 
         {/* Luxury Collection - Featured */}
         <div className="w-full max-w-sm">
-          <Card
-            className="overflow-hidden rounded-3xl shadow-2xl group cursor-pointer border-2 border-white/10 hover:border-white/20 transition-all duration-300"
+          <div 
+            className="relative cursor-pointer group"
             onClick={() => handleViewCollection("luxury")}
             style={{ aspectRatio: '9 / 16' }}
           >
-            <div className="relative w-full h-full">
-              <div 
-                className="w-full h-full bg-cover bg-center"
-                style={{
-                  backgroundImage: `linear-gradient(135deg, 
-                    rgba(147, 51, 234, 0.7) 0%, 
-                    rgba(79, 70, 229, 0.7) 50%, 
-                    rgba(67, 56, 202, 0.7) 100%),
-                    url('/video-placeholder.png')`
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
-                <div className="mb-4">
-                  <Crown className="w-16 h-16 text-white/80 drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]" />
+            {/* Main Card */}
+            <div className="relative w-full h-full rounded-2xl backdrop-blur-2xl shadow-2xl overflow-hidden">
+              
+              {/* Video Background */}
+              <video 
+                autoPlay 
+                loop 
+                muted 
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              >
+                <source src="/Luxury_1833_mp4.mp4" type="video/mp4" />
+              </video>
+              
+              {/* Dark overlay to ensure content visibility */}
+              <div className="absolute inset-0 bg-black/40"></div>
+              
+              {/* Visible border effects */}
+              <div className="absolute inset-0 rounded-2xl border border-white/40 blur-sm"></div>
+              <div className="absolute inset-0 rounded-2xl border border-white/25"></div>
+              <div className="absolute inset-0 rounded-2xl border border-slate-300/20"></div>
+              
+              {/* Darker glass overlay with hover effect */}
+              <div className="absolute inset-0 backdrop-blur-sm group-hover:backdrop-blur-none transition-all duration-300" style={{
+                background: `linear-gradient(135deg, 
+                  rgba(255, 255, 255, 0.12) 0%, 
+                  rgba(255, 255, 255, 0.06) 30%, 
+                  rgba(255, 255, 255, 0.04) 50%, 
+                  rgba(255, 255, 255, 0.05) 70%, 
+                  rgba(0, 0, 0, 0.25) 100%)`
+              }}></div>
+              
+              {/* Content */}
+              <div className="relative z-10 flex flex-col items-center justify-center text-center p-8 h-full">
+                {/* Icon */}
+                <div className="mb-8">
+                  <Crown className="w-20 h-20 text-slate-300 drop-shadow-[0_0_15px_rgba(148,163,184,0.3)]" />
                 </div>
-                <h2 className="text-4xl sm:text-5xl font-extrabold text-white uppercase tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]">
-                  Luxury
+                
+                {/* Title */}
+                <h2 className="text-5xl sm:text-6xl font-bold text-white mb-4 tracking-wide">
+                  <span className="bg-gradient-to-r from-slate-200 via-white to-slate-300 bg-clip-text text-transparent">
+                    LUXURY
+                  </span>
                 </h2>
-                <p className="text-md sm:text-lg text-white/70 mt-2 font-medium drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
-                  Enter the world of premium content
+                
+                {/* Subtitle */}
+                <p className="text-lg text-slate-400 mb-8 max-w-xs font-light">
+                  Discover premium content curated for excellence
                 </p>
-                <Button
-                  size="lg"
-                  className="mt-8 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white font-bold py-3 px-8 rounded-full text-lg shadow-xl transition-all duration-300 transform group-hover:scale-105"
+                
+                {/* Glass CTA Button */}
+                <button
+                  className="cursor-pointer relative px-8 py-4 bg-black/20 backdrop-blur-md rounded-full font-semibold text-white shadow-lg overflow-hidden"
                   onClick={e => {
                     e.stopPropagation()
                     handleViewCollection("luxury")
                   }}
                 >
-                  <Play className="w-5 h-5 mr-2" fill="currentColor" />
-                  Explore Now
-                </Button>
+                  {/* Visible button borders */}
+                  <div className="absolute inset-0 rounded-full border border-white/40 blur-sm"></div>
+                  <div className="absolute inset-0 rounded-full border border-white/25"></div>
+                  <div className="absolute inset-0 rounded-full border border-slate-300/15"></div>
+                  <div className="relative flex items-center gap-2">
+                    <Play className="w-5 h-5" fill="currentColor" />
+                    <span>Enter Collection</span>
+                  </div>
+                </button>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       </main>
     </div>
