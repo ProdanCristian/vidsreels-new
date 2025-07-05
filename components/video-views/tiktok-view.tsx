@@ -411,7 +411,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                   ref={el => { videoRefs.current[index] = el }}
                   data-index={index}
                   className="w-full h-full object-cover rounded-lg"
-                  poster={video.thumbnailUrl}
                   controls={false}
                   playsInline
                   loop
