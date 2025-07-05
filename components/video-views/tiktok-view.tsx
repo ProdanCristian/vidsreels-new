@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { Download, Play, Volume2, VolumeX, Loader2 } from 'lucide-react'
+import { Download, Play, Volume2, VolumeX } from 'lucide-react'
 import useSWR from 'swr'
 
 interface FastVideo {
@@ -45,7 +45,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const [playingStates, setPlayingStates] = useState<Record<number, boolean>>({})
   const [globalMuted, setGlobalMuted] = useState(true)
   const [failedVideos, setFailedVideos] = useState<Record<number, boolean>>({})
-  const [loadingVideos, setLoadingVideos] = useState<Record<number, boolean>>({})
+  // Removed loadingVideos state since we use global loading indicator
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
   const [manuallyPaused, setManuallyPaused] = useState<Record<number, boolean>>({})
   const retryAttemptsRef = useRef<Record<number, number>>({})
@@ -64,7 +64,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   }, [])
 
   const { data, isLoading } = useSWR<VideoResponse>(
-    collectionId ? `/api/videos/${collectionId}?page=1&limit=10&shuffle=${isShuffled}` : null,
+    collectionId ? `/api/videos/${collectionId}?page=1&limit=3&shuffle=${isShuffled}` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
@@ -197,11 +197,24 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       }
     }, { root: containerRef.current, threshold: 0.6 })
 
+    // Re-observe all videos when the list changes
     videoRefs.current.forEach(video => {
       if (video) observerRef.current?.observe(video)
     })
 
     return () => observerRef.current?.disconnect()
+  }, [allVideos.length])
+
+  // Observe new videos when they're added (handles dynamic loading)
+  useEffect(() => {
+    if (observerRef.current) {
+      // Observe any new videos that were added
+              videoRefs.current.forEach(video => {
+          if (video) {
+            observerRef.current?.observe(video)
+          }
+        })
+    }
   }, [allVideos.length])
 
   // Scroll listener to hide indicator when user scrolls
@@ -271,11 +284,16 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
 
     try {
       const nextPage = currentPage + 1
-      const url = `/api/videos/${collectionId}?page=${nextPage}&limit=10&shuffle=${isShuffled}`
+      const url = `/api/videos/${collectionId}?page=${nextPage}&limit=3&shuffle=${isShuffled}`
       const response = await fetcher(url)
 
       if (response.videos.length > 0) {
-        setAllVideos(prev => [...prev, ...response.videos])
+        setAllVideos(prev => {
+          const newVideos = [...prev, ...response.videos]
+          // Expand video refs array to accommodate new videos
+          videoRefs.current = [...videoRefs.current, ...new Array(response.videos.length).fill(null)]
+          return newVideos
+        })
         setCurrentPage(response.page)
         setHasMoreVideos(response.hasMore)
       } else {
@@ -290,10 +308,19 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   }, [collectionId, currentPage, hasMoreVideos, isShuffled, fetcher])
 
   useEffect(() => {
-    if (currentVideoIndex >= allVideos.length - 3 && hasMoreVideos) {
+    // Load more videos when we're at the second-to-last video (1 video remaining)
+    if (currentVideoIndex >= allVideos.length - 2 && hasMoreVideos) {
       loadMoreVideos()
     }
   }, [currentVideoIndex, allVideos.length, hasMoreVideos, loadMoreVideos])
+
+  // Aggressive preloading - load next batch when we're at the last video of current batch
+  useEffect(() => {
+    // If we have videos and we're at the last video, preload more
+    if (allVideos.length > 0 && currentVideoIndex === allVideos.length - 1 && hasMoreVideos && !isLoadingMore) {
+      loadMoreVideos()
+    }
+  }, [currentVideoIndex, allVideos.length, hasMoreVideos, isLoadingMore, loadMoreVideos])
 
   const handleVideoError = useCallback((index: number) => {
     const currentAttempts = retryAttemptsRef.current[index] || 0;
@@ -318,6 +345,38 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const handleVideoDownload = useCallback((video: FastVideo) => {
     onVideoDownload(video.streamUrl, `${video.name.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`)
   }, [onVideoDownload])
+
+  // Prefetch next videos for smoother playback
+  const prefetchNextVideos = useCallback(() => {
+    const nextVideosToPreload = 2 // Preload next 2 videos
+    const startIndex = currentVideoIndex + 1
+    
+    for (let i = startIndex; i < Math.min(startIndex + nextVideosToPreload, allVideos.length); i++) {
+      const video = allVideos[i]
+      if (video) {
+        // Create a prefetch link element
+        const link = document.createElement('link')
+        link.rel = 'prefetch'
+        link.href = video.streamUrl
+        link.as = 'video'
+        document.head.appendChild(link)
+        
+        // Remove after a short delay to avoid cluttering the head
+        setTimeout(() => {
+          if (document.head.contains(link)) {
+            document.head.removeChild(link)
+          }
+        }, 5000)
+      }
+    }
+  }, [currentVideoIndex, allVideos])
+
+  // Trigger prefetch when current video changes
+  useEffect(() => {
+    if (allVideos.length > 0) {
+      prefetchNextVideos()
+    }
+  }, [currentVideoIndex, allVideos.length, prefetchNextVideos])
 
   return (
     <div 
@@ -357,13 +416,14 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                   playsInline
                   loop
                   muted={globalMuted}
-                  preload="auto"
+                  preload={
+                    // Aggressively preload current, next, and previous video
+                    Math.abs(index - currentVideoIndex) <= 1 ? "auto" : "metadata"
+                  }
                   crossOrigin="anonymous"
                   onClick={() => togglePlayPause(index)}
                   onPlay={() => setPlayingStates(prev => ({ ...prev, [index]: true }))}
                   onPause={() => setPlayingStates(prev => ({ ...prev, [index]: false }))}
-                  onLoadStart={() => setLoadingVideos(prev => ({ ...prev, [index]: true }))}
-                  onCanPlay={() => setLoadingVideos(prev => ({ ...prev, [index]: false }))}
                   onError={() => handleVideoError(index)}
                   src={video.streamUrl}
                 />
@@ -374,15 +434,10 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                 </div>
               )}
               
-              {/* Loading Overlay */}
-              {loadingVideos[index] && !playingStates[index] && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg pointer-events-none">
-                  <Loader2 className="w-8 h-8 text-white animate-spin" />
-                </div>
-              )}
+              {/* Loading Overlay - Remove individual video loading indicators since we have a global one */}
 
               {/* Play/Pause Button */}
-              {!playingStates[index] && !loadingVideos[index] && !failedVideos[index] && (index === 0 || manuallyPaused[index]) && (
+              {!playingStates[index] && !failedVideos[index] && (index === 0 || manuallyPaused[index]) && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <Button
                     variant="ghost"
@@ -462,8 +517,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       }} />
 
       {(isLoading || isLoadingMore) && (
-        <div className="w-full h-full absolute inset-0 flex items-center justify-center bg-black/50 z-50 pointer-events-none">
-          <Loader2 className="w-10 h-10 text-white animate-spin" />
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
         </div>
       )}
     </div>

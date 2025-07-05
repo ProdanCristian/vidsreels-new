@@ -60,3 +60,18 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+model Video {
+  id             String    @id @default(cuid())
+  s3Key          String    @unique // The original S3 key
+  size           String    // Formatted file size
+  streamUrl      String    // The proxy URL for streaming
+  thumbnailUrl   String?   // Thumbnail URL if available
+  collection     String    // Collection identifier
+  lastModified   DateTime  // Last modified date from R2
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([collection])
+  @@index([lastModified])
+}
