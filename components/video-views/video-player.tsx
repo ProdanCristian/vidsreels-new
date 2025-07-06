@@ -5,6 +5,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 interface VideoPlayerProps {
   video: FastVideo
   index: number
+  isActive: boolean
   globalMuted: boolean
   preload: 'auto' | 'metadata' | 'none'
   onTogglePlayPause: () => void
@@ -17,6 +18,7 @@ interface VideoPlayerProps {
 export default function VideoPlayer({
   video,
   index,
+  isActive,
   globalMuted,
   preload,
   onTogglePlayPause,
@@ -27,6 +29,7 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
   const internalVideoRef = useRef<HTMLVideoElement | null>(null)
   const timelineRef = useRef<HTMLDivElement | null>(null)
+  const retryCountRef = useRef(0)
   const [showPlayButton, setShowPlayButton] = useState(false)
   const [progress, setProgress] = useState(0)
   const [isSeeking, setIsSeeking] = useState(false)
@@ -43,6 +46,7 @@ export default function VideoPlayer({
     if (!videoElement) return
 
     const handlePlay = () => {
+      retryCountRef.current = 0 // Reset retries on successful play
       setShowPlayButton(false)
       onPlay()
     }
@@ -66,6 +70,27 @@ export default function VideoPlayer({
     }
 
     const handleError = (e: Event) => {
+      // Silently ignore errors for non-active videos.
+      if (!isActive) {
+        return
+      }
+
+      const maxRetries = 2
+      if (retryCountRef.current < maxRetries) {
+        retryCountRef.current++
+        const delay = 500 * retryCountRef.current // 500ms, 1000ms
+        console.warn(
+          `Video player for "${video.name}" failed. Retrying in ${delay}ms... (Attempt ${retryCountRef.current})`
+        )
+        setTimeout(() => {
+          videoElement.load() // This tells the browser to reload the source
+        }, delay)
+        return // Stop here and don't propagate the error yet.
+      }
+
+      // If all retries have failed, then we log the definitive error.
+      console.error(`🚨 All retries failed for video: "${video.name}"`)
+      
       const target = e.target as HTMLVideoElement
       
       // Safely extract error information to avoid circular references
@@ -226,7 +251,7 @@ export default function VideoPlayer({
       videoElement.removeEventListener('canplaythrough', handleCanPlayThrough)
       videoElement.removeEventListener('suspend', handleSuspend)
     }
-  }, [onPlay, onPause, isSeeking, onError])
+  }, [onPlay, onPause, isSeeking, onError, isActive])
 
   const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!timelineRef.current || !internalVideoRef.current?.duration) return
@@ -283,8 +308,9 @@ export default function VideoPlayer({
   }, [handleSeek])
 
   useEffect(() => {
-    // When the video source changes, reset the progress.
+    // When the video source changes, reset progress and retries.
     setProgress(0)
+    retryCountRef.current = 0
   }, [video.directUrl])
 
   return (

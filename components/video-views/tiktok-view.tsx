@@ -86,7 +86,13 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         await video.play()
       }
     } catch (error) {
-      console.warn(`Failed to play video ${index}:`, error)
+      // This catch is important for mobile autoplay issues.
+      // Browsers often block `play()` if not initiated by user action or if the video isn't ready.
+      if (error instanceof Error) {
+        console.warn(`Autoplay for video ${index} was prevented. Error: ${error.name} - ${error.message}`)
+      } else {
+        console.warn(`An unknown autoplay error occurred for video ${index}.`)
+      }
     }
   }, [globalMuted, allVideos])
 
@@ -152,29 +158,40 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect()
     
+    // This observer's job is to identify which video is currently centered.
     observerRef.current = new IntersectionObserver((entries) => {
       let mostVisibleEntry: IntersectionObserverEntry | null = null
       
+      // Find the most visible video in the viewport.
       for (const entry of entries) {
         if (!mostVisibleEntry || entry.intersectionRatio > mostVisibleEntry.intersectionRatio) {
           mostVisibleEntry = entry
         }
       }
 
-      if (mostVisibleEntry && mostVisibleEntry.intersectionRatio > 0.5) {
+      // If a video is sufficiently visible, we'll mark it as current.
+      if (mostVisibleEntry && mostVisibleEntry.intersectionRatio > 0.6) {
         const index = parseInt((mostVisibleEntry.target as HTMLElement).dataset.index || '0')
-        const previousIndex = currentVideoIndex
-        setCurrentVideoIndex(index)
         
-        // Hide scroll hint if user has scrolled to different video
-        if (index !== previousIndex && !hasUserScrolled) {
-          setHasUserScrolled(true)
-          setShowScrollHint(false)
-        }
+        setCurrentVideoIndex(currentIndex => {
+          // Only update state if the index has actually changed.
+          if (index === currentIndex) {
+            return currentIndex
+          }
+
+          // If this is the first time the user is scrolling, hide the scroll hint.
+          if (!hasUserScrolled) {
+            setHasUserScrolled(true)
+            setShowScrollHint(false)
+          }
+          
+          return index
+        })
       }
     }, { 
       root: containerRef.current, 
-      threshold: [0.5, 0.7, 0.9]
+      // Using a single, higher threshold makes detection more reliable.
+      threshold: 0.6
     })
 
     videoRefs.current.forEach(video => {
@@ -182,15 +199,41 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     })
 
     return () => observerRef.current?.disconnect()
-  }, [allVideos.length, currentVideoIndex, hasUserScrolled])
+  }, [allVideos.length, hasUserScrolled]) // Dependencies are simplified for stability.
 
-  // Autoplay current video
+  // Autoplay current video with readiness check
   useEffect(() => {
-    const video = videoRefs.current[currentVideoIndex]
-    if (video && video.paused) {
-      setTimeout(() => playVideo(currentVideoIndex), 300)
+    const video = videoRefs.current[currentVideoIndex];
+    if (!video || !video.paused) {
+      return;
     }
-  }, [currentVideoIndex, playVideo])
+
+    // This function will be called to attempt playback.
+    const attemptPlay = () => {
+      playVideo(currentVideoIndex);
+    };
+
+    // readyState >= 3 means the video has enough data to start playing.
+    if (video.readyState >= 3) {
+      attemptPlay();
+    } else {
+      // If the video is not ready, we wait for the 'canplay' event.
+      // This is the browser telling us it's now safe to call .play()
+      const onCanPlay = () => {
+        attemptPlay();
+      };
+      
+      // We use `{ once: true }` to ensure the event listener is automatically removed
+      // after it fires, preventing memory leaks.
+      video.addEventListener('canplay', onCanPlay, { once: true });
+
+      // The cleanup function for this effect will remove the listener if the user
+      // scrolls away before the video becomes playable.
+      return () => {
+        video.removeEventListener('canplay', onCanPlay);
+      };
+    }
+  }, [currentVideoIndex, playVideo]);
 
   // Load more videos when needed (when user is 5 videos away from the end)
   useEffect(() => {
@@ -204,12 +247,10 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     onVideoDownload(video.directUrl, `${video.name.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`)
   }, [onVideoDownload])
 
-  // Handle video errors - Log only, do not show failure UI
-  const handleVideoError = useCallback((index: number) => {
-    // We log the error for debugging but no longer set a "failed" state.
-    // This prevents the UI from showing an error message when a video is
-    // interrupted by a fast scroll, which is expected behavior.
-    console.error(`Video at index ${index} encountered an error. See player logs for details.`)
+  // This function is now effectively silenced. The VideoPlayer handles its own
+  // retries and logging. We no longer need to log a redundant message here.
+  const handleVideoError = useCallback(() => {
+    // Intentionally left blank.
   }, [])
 
   return (
@@ -230,10 +271,19 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
           return null
         }
         
-        // Determine preload state to be less aggressive on mobile
-        const isCurrent = index === currentVideoIndex
-        const isNext = index === currentVideoIndex + 1
-        const preload = isCurrent ? 'auto' : (isNext ? 'metadata' : 'none');
+        // A more aggressive preload strategy for both desktop and mobile to ensure
+        // faster video starts and smoother scrolling.
+        const isCurrent = index === currentVideoIndex;
+        const isNext = index === currentVideoIndex + 1;
+        const isPrev = index === currentVideoIndex - 1;
+
+        let preload: 'auto' | 'metadata' | 'none' = 'none';
+
+        if (isCurrent || isNext || isPrev) {
+          preload = 'auto';
+        } else {
+          preload = 'metadata';
+        }
         
         return (
           <div
@@ -249,12 +299,13 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                 <VideoPlayer
                   video={video}
                   index={index}
+                  isActive={isCurrent}
                   globalMuted={globalMuted}
                   preload={preload}
                   onTogglePlayPause={() => togglePlayPause(index)}
                   onPlay={() => {}}
                   onPause={() => {}}
-                  onError={() => handleVideoError(index)}
+                  onError={() => handleVideoError()}
                   videoRef={(el) => { 
                     if (el) {
                       // Set default pause reason for new video elements
