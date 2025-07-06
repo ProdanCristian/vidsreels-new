@@ -18,8 +18,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const [allVideos, setAllVideos] = useState<FastVideo[]>([])
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
   const [globalMuted, setGlobalMuted] = useState(true)
-  const [failedVideos, setFailedVideos] = useState<Record<number, boolean>>({})
-  const retryCounts = useRef<Record<number, number>>({})
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
@@ -37,7 +35,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   }, [])
 
   const { data, isLoading } = useSWR<VideoResponse>(
-    collectionId ? `/api/videos/${collectionId}?page=1&limit=3&shuffle=${isShuffled}` : null,
+    collectionId ? `/api/videos/${collectionId}?page=1&limit=10&shuffle=${isShuffled}` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
@@ -59,7 +57,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setCurrentVideoIndex(0)
       setCurrentPage(1)
       setHasMoreVideos(true)
-      setFailedVideos({})
       setShowScrollHint(true)
       setHasUserScrolled(false)
     }
@@ -90,7 +87,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       }
     } catch (error) {
       console.warn(`Failed to play video ${index}:`, error)
-      setFailedVideos(prev => ({ ...prev, [index]: true }))
     }
   }, [globalMuted, allVideos])
 
@@ -131,7 +127,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     setIsLoadingMore(true)
     try {
       const nextPage = currentPage + 1
-      const url = `/api/videos/${collectionId}?page=${nextPage}&limit=3&shuffle=${isShuffled}`
+      const url = `/api/videos/${collectionId}?page=${nextPage}&limit=10&shuffle=${isShuffled}`
       const response = await fetcher(url)
 
       if (response.videos.length > 0) {
@@ -196,9 +192,9 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     }
   }, [currentVideoIndex, playVideo])
 
-  // Load more videos when needed
+  // Load more videos when needed (when user is 5 videos away from the end)
   useEffect(() => {
-    if (currentVideoIndex >= allVideos.length - 2 && hasMoreVideos && !isLoadingMore) {
+    if (currentVideoIndex >= allVideos.length - 5 && hasMoreVideos && !isLoadingMore) {
       loadMoreVideos()
     }
   }, [currentVideoIndex, allVideos.length, hasMoreVideos, isLoadingMore, loadMoreVideos])
@@ -208,34 +204,13 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     onVideoDownload(video.directUrl, `${video.name.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`)
   }, [onVideoDownload])
 
-  // Handle video errors with automatic retries
+  // Handle video errors - Log only, do not show failure UI
   const handleVideoError = useCallback((index: number) => {
-    const maxRetries = 3
-    const currentRetryCount = retryCounts.current[index] || 0
-
-    if (currentRetryCount < maxRetries) {
-      retryCounts.current[index] = currentRetryCount + 1
-      
-      setTimeout(() => {
-        const video = videoRefs.current[index]
-        if (video) {
-          console.log(`Retrying video ${index}, attempt ${currentRetryCount + 1}`)
-          video.load()
-          // If it's the current video, try to play it after loading
-          if (index === currentVideoIndex) {
-            playVideo(index).catch(err => {
-              console.error(`Retry play failed for video ${index}:`, err)
-              // If playing still fails after load, mark as failed
-              setFailedVideos(prev => ({ ...prev, [index]: true }))
-            })
-          }
-        }
-      }, 1000 * (currentRetryCount + 1)) // Exponential backoff
-    } else {
-      console.error(`Video ${index} failed after ${maxRetries} retries.`)
-      setFailedVideos(prev => ({ ...prev, [index]: true }))
-    }
-  }, [currentVideoIndex, playVideo])
+    // We log the error for debugging but no longer set a "failed" state.
+    // This prevents the UI from showing an error message when a video is
+    // interrupted by a fast scroll, which is expected behavior.
+    console.error(`Video at index ${index} encountered an error. See player logs for details.`)
+  }, [])
 
   return (
     <div 
@@ -255,11 +230,10 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
           return null
         }
         
-        // Determine preload state
+        // Determine preload state to be less aggressive on mobile
         const isCurrent = index === currentVideoIndex
         const isNext = index === currentVideoIndex + 1
-        const isPrev = index === currentVideoIndex - 1
-        const preload = isCurrent || isNext || isPrev ? 'auto' : 'metadata'
+        const preload = isCurrent ? 'auto' : (isNext ? 'metadata' : 'none');
         
         return (
           <div
@@ -275,16 +249,10 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                 <VideoPlayer
                   video={video}
                   index={index}
-                  isFailed={failedVideos[index] || false}
                   globalMuted={globalMuted}
                   preload={preload}
                   onTogglePlayPause={() => togglePlayPause(index)}
-                  onPlay={() => {
-                    // Reset retry count on successful play
-                    if (retryCounts.current[index]) {
-                      delete retryCounts.current[index]
-                    }
-                  }}
+                  onPlay={() => {}}
                   onPause={() => {}}
                   onError={() => handleVideoError(index)}
                   videoRef={(el) => { 

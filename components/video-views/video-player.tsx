@@ -5,7 +5,6 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 interface VideoPlayerProps {
   video: FastVideo
   index: number
-  isFailed: boolean
   globalMuted: boolean
   preload: 'auto' | 'metadata' | 'none'
   onTogglePlayPause: () => void
@@ -18,7 +17,6 @@ interface VideoPlayerProps {
 export default function VideoPlayer({
   video,
   index,
-  isFailed,
   globalMuted,
   preload,
   onTogglePlayPause,
@@ -41,8 +39,8 @@ export default function VideoPlayer({
 
   // Listen to actual video play/pause events to track real state
   useEffect(() => {
-    const video = internalVideoRef.current
-    if (!video) return
+    const videoElement = internalVideoRef.current
+    if (!videoElement) return
 
     const handlePlay = () => {
       setShowPlayButton(false)
@@ -51,19 +49,19 @@ export default function VideoPlayer({
 
     const handlePause = () => {
       // Check the 'data-pause-reason' attribute to see if it was a manual pause
-      if (video.dataset.pauseReason === 'manual') {
+      if (videoElement.dataset.pauseReason === 'manual') {
         setShowPlayButton(true)
       } else {
         setShowPlayButton(false)
       }
       // Reset the reason
-      video.dataset.pauseReason = 'auto'
+      videoElement.dataset.pauseReason = 'auto'
       onPause()
     }
     
     const handleTimeUpdate = () => {
-      if (!isSeeking && video.duration > 0) {
-        setProgress((video.currentTime / video.duration) * 100)
+      if (!isSeeking && videoElement.duration > 0) {
+        setProgress((videoElement.currentTime / videoElement.duration) * 100)
       }
     }
 
@@ -77,8 +75,11 @@ export default function VideoPlayer({
         networkState: target.networkState,
         readyState: target.readyState,
         videoSrc: target.src,
+        videoName: video.name,
+        videoId: video.id,
         currentTime: target.currentTime,
         duration: target.duration || 0,
+        buffered: target.buffered.length > 0 ? `${target.buffered.start(0)}-${target.buffered.end(0)}` : 'none',
         isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
         connectionType: (navigator as unknown as { connection?: { effectiveType?: string } }).connection?.effectiveType || 'unknown',
         timestamp: new Date().toISOString()
@@ -97,6 +98,19 @@ export default function VideoPlayer({
       const errorCode = target.error?.code
       if (errorCode && errorMessages[errorCode]) {
         console.error('📋 Error explanation:', errorMessages[errorCode])
+        
+        // Special handling for decode errors
+        if (errorCode === 3) {
+          console.error('🔍 Decode Error Details:')
+          console.error('  Video Name:', video.name)
+          console.error('  Video URL:', target.src)
+          console.error('  Video ID:', video.id)
+          console.error('  Note: Video plays fine in browser directly, so this is a player context issue')
+          console.error('  Possible fixes:')
+          console.error('    - Try reloading the video element')
+          console.error('    - Check for JavaScript conflicts')
+          console.error('    - Verify CORS headers')
+        }
       }
       
       onError()
@@ -104,29 +118,113 @@ export default function VideoPlayer({
 
     const handleLoadStart = () => {
       console.log('📱 Video load started:', {
-        src: video.src,
+        name: video.name,
+        src: video.directUrl,
         isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       })
     }
 
     const handleCanPlay = () => {
-      console.log('✅ Video can play:', video.src)
+      console.log('✅ Video can play:', {
+        name: video.name,
+        src: video.directUrl,
+        duration: internalVideoRef.current?.duration || 0
+      })
     }
 
-    video.addEventListener('play', handlePlay)
-    video.addEventListener('pause', handlePause)
-    video.addEventListener('timeupdate', handleTimeUpdate)
-    video.addEventListener('error', handleError)
-    video.addEventListener('loadstart', handleLoadStart)
-    video.addEventListener('canplay', handleCanPlay)
+    const handleLoadedMetadata = () => {
+      const videoEl = internalVideoRef.current
+      console.log('📊 Video metadata loaded:', {
+        name: video.name,
+        duration: videoEl?.duration || 0,
+        videoWidth: videoEl?.videoWidth || 0,
+        videoHeight: videoEl?.videoHeight || 0,
+        readyState: videoEl?.readyState || 0,
+        networkState: videoEl?.networkState || 0
+      })
+    }
+
+    const handleLoadedData = () => {
+      console.log('📁 Video data loaded:', {
+        name: video.name,
+        readyState: internalVideoRef.current?.readyState || 0,
+        buffered: internalVideoRef.current?.buffered.length || 0
+      })
+    }
+
+    const handleProgress = () => {
+      const videoEl = internalVideoRef.current
+      if (videoEl && videoEl.buffered.length > 0) {
+        const bufferedEnd = videoEl.buffered.end(videoEl.buffered.length - 1)
+        const duration = videoEl.duration || 0
+        const bufferedPercent = duration > 0 ? (bufferedEnd / duration) * 100 : 0
+        console.log('📶 Video buffering progress:', {
+          name: video.name,
+          bufferedPercent: Math.round(bufferedPercent),
+          bufferedTime: Math.round(bufferedEnd),
+          totalDuration: Math.round(duration)
+        })
+      }
+    }
+
+    const handleStalled = () => {
+      console.warn('⚠️ Video stalled:', {
+        name: video.name,
+        currentTime: internalVideoRef.current?.currentTime || 0,
+        networkState: internalVideoRef.current?.networkState || 0
+      })
+    }
+
+    const handleWaiting = () => {
+      console.warn('⏳ Video waiting for data:', {
+        name: video.name,
+        currentTime: internalVideoRef.current?.currentTime || 0,
+        buffered: internalVideoRef.current?.buffered.length || 0
+      })
+    }
+
+    const handleCanPlayThrough = () => {
+      console.log('🎯 Video can play through (fully loaded):', {
+        name: video.name,
+        duration: internalVideoRef.current?.duration || 0
+      })
+    }
+
+    const handleSuspend = () => {
+      console.log('⏸️ Video loading suspended:', {
+        name: video.name,
+        networkState: internalVideoRef.current?.networkState || 0
+      })
+    }
+
+    videoElement.addEventListener('play', handlePlay)
+    videoElement.addEventListener('pause', handlePause)
+    videoElement.addEventListener('timeupdate', handleTimeUpdate)
+    videoElement.addEventListener('error', handleError)
+    videoElement.addEventListener('loadstart', handleLoadStart)
+    videoElement.addEventListener('canplay', handleCanPlay)
+    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata)
+    videoElement.addEventListener('loadeddata', handleLoadedData)
+    videoElement.addEventListener('progress', handleProgress)
+    videoElement.addEventListener('stalled', handleStalled)
+    videoElement.addEventListener('waiting', handleWaiting)
+    videoElement.addEventListener('canplaythrough', handleCanPlayThrough)
+    videoElement.addEventListener('suspend', handleSuspend)
 
     return () => {
-      video.removeEventListener('play', handlePlay)
-      video.removeEventListener('pause', handlePause)
-      video.removeEventListener('timeupdate', handleTimeUpdate)
-      video.removeEventListener('error', handleError)
-      video.removeEventListener('loadstart', handleLoadStart)
-      video.removeEventListener('canplay', handleCanPlay)
+      videoElement.removeEventListener('play', handlePlay)
+      videoElement.removeEventListener('pause', handlePause)
+      videoElement.removeEventListener('timeupdate', handleTimeUpdate)
+      videoElement.removeEventListener('error', handleError)
+      videoElement.removeEventListener('loadstart', handleLoadStart)
+      videoElement.removeEventListener('canplay', handleCanPlay)
+      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      videoElement.removeEventListener('loadeddata', handleLoadedData)
+      videoElement.removeEventListener('progress', handleProgress)
+      videoElement.removeEventListener('stalled', handleStalled)
+      videoElement.removeEventListener('waiting', handleWaiting)
+      videoElement.removeEventListener('canplaythrough', handleCanPlayThrough)
+      videoElement.removeEventListener('suspend', handleSuspend)
     }
   }, [onPlay, onPause, isSeeking, onError])
 
@@ -189,15 +287,6 @@ export default function VideoPlayer({
     setProgress(0)
   }, [video.directUrl])
 
-  if (isFailed) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900 text-white rounded-lg p-4 text-center">
-        <p className="font-semibold">Could not load video</p>
-        <p className="text-sm text-zinc-400">{video.name}</p>
-      </div>
-    )
-  }
-
   return (
     <>
       <video
@@ -209,6 +298,7 @@ export default function VideoPlayer({
           loop
           muted={globalMuted}
           preload={preload}
+          crossOrigin="anonymous"
           onClick={onTogglePlayPause}
           onError={onError}
         >
