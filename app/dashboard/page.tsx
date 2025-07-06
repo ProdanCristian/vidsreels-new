@@ -29,7 +29,7 @@ export default function Dashboard() {
         </div> */}
 
         {/* Luxury Collection - Featured */}
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-xs sm:max-w-sm md:max-w-md lg:max-w-sm">
           <div 
             className="relative cursor-pointer group"
             onClick={() => handleViewCollection("luxury")}
@@ -68,27 +68,27 @@ export default function Dashboard() {
               }}></div>
               
               {/* Content */}
-              <div className="relative z-10 flex flex-col items-center justify-center text-center p-8 h-full">
+              <div className="relative z-10 flex flex-col items-center justify-center text-center p-4 sm:p-6 md:p-8 h-full">
                 {/* Icon */}
-                <div className="mb-8">
-                  <Crown className="w-20 h-20 text-slate-300 drop-shadow-[0_0_15px_rgba(148,163,184,0.3)]" />
+                <div className="mb-4 sm:mb-6 md:mb-8">
+                  <Crown className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 text-slate-300 drop-shadow-[0_0_15px_rgba(148,163,184,0.3)]" />
                 </div>
                 
                 {/* Title */}
-                <h2 className="text-5xl sm:text-6xl font-bold text-white mb-4 tracking-wide">
+                <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 sm:mb-3 md:mb-4 tracking-wide">
                   <span className="bg-gradient-to-r from-slate-200 via-white to-slate-300 bg-clip-text text-transparent">
                     LUXURY
                   </span>
                 </h2>
                 
                 {/* Subtitle */}
-                <p className="text-lg text-slate-400 mb-8 max-w-xs font-light">
+                <p className="text-sm sm:text-base md:text-lg text-slate-400 mb-4 sm:mb-6 md:mb-8 max-w-xs font-light px-2">
                   Discover premium content curated for excellence
                 </p>
                 
                 {/* Glass CTA Button */}
                 <button
-                  className="cursor-pointer relative px-8 py-4 bg-black/20 backdrop-blur-md rounded-full font-semibold text-white shadow-lg overflow-hidden"
+                  className="cursor-pointer relative px-4 py-2 sm:px-6 sm:py-3 md:px-8 md:py-4 bg-black/20 backdrop-blur-md rounded-full font-semibold text-white shadow-lg overflow-hidden text-sm sm:text-base"
                   onClick={e => {
                     e.stopPropagation()
                     handleViewCollection("luxury")
@@ -99,7 +99,7 @@ export default function Dashboard() {
                   <div className="absolute inset-0 rounded-full border border-white/25"></div>
                   <div className="absolute inset-0 rounded-full border border-slate-300/15"></div>
                   <div className="relative flex items-center gap-2">
-                    <Play className="w-5 h-5" fill="currentColor" />
+                    <Play className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" />
                     <span>Enter Collection</span>
                   </div>
                 </button>
