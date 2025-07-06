@@ -1,60 +1,33 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Button } from '@/components/ui/button'
-import { Download, Play, Volume2, VolumeX } from 'lucide-react'
 import useSWR from 'swr'
+import { FastVideo, VideoResponse, TikTokViewProps } from './types'
+import LoadingSpinner from './loading-spinner'
+import VideoControls from './video-controls'
+import VideoPlayer from './video-player'
+import ScrollIndicator from './scroll-indicator'
 
-interface FastVideo {
-  id: string
-  name: string
-  size: string
-  streamUrl: string
-  directUrl: string
-  embedUrl: string
-  thumbnailUrl: string
-  lastModified: Date
-}
-
-interface VideoResponse {
-  videos: FastVideo[]
-  hasMore: boolean
-  totalCount: number
-  page: number
-  limit: number
-  nextToken?: string
-}
-
-interface TikTokViewProps {
-  collectionId: string
-  onVideoDownload: (videoUrl: string, filename: string) => void
-  isShuffled: boolean
-}
-
-// ULTRA-FAST TikTok View with Direct Google Drive Streaming
+// Main TikTok View Component
 export default function TikTokView({ collectionId, onVideoDownload, isShuffled }: TikTokViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([])
   const observerRef = useRef<IntersectionObserver | null>(null)
-  const loadMoreRef = useRef<HTMLDivElement | null>(null)
-  const isLoadingMoreRef = useRef(false)
-  const playPromisesRef = useRef<Record<number, Promise<void> | null>>({})
   
-  // States
+  // Core states
   const [allVideos, setAllVideos] = useState<FastVideo[]>([])
-  const [playingStates, setPlayingStates] = useState<Record<number, boolean>>({})
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
   const [globalMuted, setGlobalMuted] = useState(true)
   const [failedVideos, setFailedVideos] = useState<Record<number, boolean>>({})
-  // Removed loadingVideos state since we use global loading indicator
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
-  const [manuallyPaused, setManuallyPaused] = useState<Record<number, boolean>>({})
-  const retryAttemptsRef = useRef<Record<number, number>>({})
-  const scrollIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const scrollIndicatorHideTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const retryCounts = useRef<Record<number, number>>({})
+  
+  // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMoreVideos, setHasMoreVideos] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [showScrollIndicator, setShowScrollIndicator] = useState(false)
+  
+  // Scroll hint state
+  const [showScrollHint, setShowScrollHint] = useState(true)
   const [hasUserScrolled, setHasUserScrolled] = useState(false)
 
   const fetcher = useCallback(async (url: string): Promise<VideoResponse> => {
@@ -69,6 +42,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
 
+  // Initialize videos when data loads
   useEffect(() => {
     if (data?.videos) {
       setAllVideos(data.videos)
@@ -78,210 +52,83 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     }
   }, [data])
 
+  // Reset state when shuffle changes
   useEffect(() => {
     if (isShuffled) {
       setAllVideos([])
       setCurrentVideoIndex(0)
       setCurrentPage(1)
       setHasMoreVideos(true)
-      setPlayingStates({})
-      setManuallyPaused({})
+      setFailedVideos({})
+      setShowScrollHint(true)
       setHasUserScrolled(false)
-      setShowScrollIndicator(false)
-      // Clear any pending timeouts
-      if (scrollIndicatorTimeoutRef.current) {
-        clearTimeout(scrollIndicatorTimeoutRef.current)
-        scrollIndicatorTimeoutRef.current = null
-      }
-      if (scrollIndicatorHideTimeoutRef.current) {
-        clearTimeout(scrollIndicatorHideTimeoutRef.current)
-        scrollIndicatorHideTimeoutRef.current = null
-      }
     }
   }, [isShuffled])
 
-  const safePause = useCallback(async (video: HTMLVideoElement, index: number) => {
-    const playPromise = playPromisesRef.current[index]
-    if (playPromise) {
-      await playPromise.catch(() => {})
-    }
-    if (!video.paused) {
-      video.pause()
-    }
-  }, [])
-
+  // Play video function
   const playVideo = useCallback(async (index: number) => {
     const video = videoRefs.current[index]
-    if (!video || !video.paused) return
-
-    // Pause all other videos
-    await Promise.all(
-      videoRefs.current.map((v, i) => {
-        if (v && i !== index) {
-          return safePause(v, i)
-        }
-        return Promise.resolve()
-      })
-    )
+    const videoData = allVideos[index]
     
-    // Automatically unmute audio when playing the first video
-    if (index === 0 && globalMuted) {
-      setGlobalMuted(false)
-    }
-    
-    // Show scroll indicator after first video starts playing
-    if (index === 0 && !hasUserScrolled) {
-      scrollIndicatorTimeoutRef.current = setTimeout(() => {
-        if (!hasUserScrolled) {
-          setShowScrollIndicator(true)
-          // Hide indicator after 4 seconds
-          scrollIndicatorHideTimeoutRef.current = setTimeout(() => {
-            setShowScrollIndicator(false)
-          }, 4000)
-        }
-      }, 1000)
-    }
+    if (!video || !videoData?.directUrl) return
     
     try {
-      const playPromise = video.play()
-      playPromisesRef.current[index] = playPromise
-      await playPromise
+      // Pause all other videos automatically
+      videoRefs.current.forEach((v, i) => {
+        if (v && i !== index && !v.paused) {
+          v.dataset.pauseReason = 'auto' // Set reason for automatic pause
+          v.pause()
+        }
+      })
+      
+      // Set up video for autoplay
+      video.muted = globalMuted
+      video.volume = globalMuted ? 0 : 1
+      
+      if (video.paused) {
+        await video.play()
+      }
     } catch (error) {
-      console.error(`Video ${index} failed to play:`, error)
-    } finally {
-      playPromisesRef.current[index] = null
+      console.warn(`Failed to play video ${index}:`, error)
+      setFailedVideos(prev => ({ ...prev, [index]: true }))
     }
-  }, [safePause, globalMuted, hasUserScrolled])
+  }, [globalMuted, allVideos])
 
+  // Toggle play/pause
   const togglePlayPause = useCallback(async (index: number) => {
     const video = videoRefs.current[index]
     if (!video) return
 
     if (video.paused) {
-      setManuallyPaused(prev => ({ ...prev, [index]: false }))
       await playVideo(index)
     } else {
-      setManuallyPaused(prev => ({ ...prev, [index]: true }))
-      await safePause(video, index)
+      video.dataset.pauseReason = 'manual' // Set reason for manual pause
+      video.pause()
     }
-  }, [playVideo, safePause])
-  
-  // Autoplay logic driven by currentVideoIndex
-  useEffect(() => {
-    if (manuallyPaused[currentVideoIndex]) return
-    
-    const video = videoRefs.current[currentVideoIndex]
-    if (video && video.paused) {
-      // Small delay to ensure video is ready
-      setTimeout(() => {
-        playVideo(currentVideoIndex)
-      }, 100)
-    }
-  }, [currentVideoIndex, manuallyPaused, playVideo])
+  }, [playVideo])
 
-  // Intersection Observer to set current video
-  useEffect(() => {
-    if (observerRef.current) observerRef.current.disconnect()
-    
-    observerRef.current = new IntersectionObserver((entries) => {
-      let mostVisibleEntry: IntersectionObserverEntry | null = null
-      for (const entry of entries) {
-        if (!mostVisibleEntry || entry.intersectionRatio > mostVisibleEntry.intersectionRatio) {
-          mostVisibleEntry = entry
+  // Toggle global mute
+  const toggleGlobalMute = useCallback(() => {
+    setGlobalMuted(prev => {
+      const newMuted = !prev
+      
+      // Apply to all videos immediately
+      videoRefs.current.forEach(video => {
+        if (video) {
+          video.muted = newMuted
+          video.volume = newMuted ? 0 : 1
         }
-      }
-
-      if (mostVisibleEntry && mostVisibleEntry.intersectionRatio > 0.6) {
-        const index = parseInt((mostVisibleEntry.target as HTMLElement).dataset.index || '0')
-        setCurrentVideoIndex(index)
-      }
-    }, { root: containerRef.current, threshold: 0.6 })
-
-    // Re-observe all videos when the list changes
-    videoRefs.current.forEach(video => {
-      if (video) observerRef.current?.observe(video)
+      })
+      
+      return newMuted
     })
-
-    return () => observerRef.current?.disconnect()
-  }, [allVideos.length])
-
-  // Observe new videos when they're added (handles dynamic loading)
-  useEffect(() => {
-    if (observerRef.current) {
-      // Observe any new videos that were added
-              videoRefs.current.forEach(video => {
-          if (video) {
-            observerRef.current?.observe(video)
-          }
-        })
-    }
-  }, [allVideos.length])
-
-  // Scroll listener to hide indicator when user scrolls
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const handleScroll = () => {
-      if (!hasUserScrolled) {
-        setHasUserScrolled(true)
-        setShowScrollIndicator(false)
-        // Clear any pending timeouts
-        if (scrollIndicatorTimeoutRef.current) {
-          clearTimeout(scrollIndicatorTimeoutRef.current)
-          scrollIndicatorTimeoutRef.current = null
-        }
-        if (scrollIndicatorHideTimeoutRef.current) {
-          clearTimeout(scrollIndicatorHideTimeoutRef.current)
-          scrollIndicatorHideTimeoutRef.current = null
-        }
-      }
-    }
-
-    const handleTouchStart = () => {
-      if (!hasUserScrolled) {
-        setHasUserScrolled(true)
-        setShowScrollIndicator(false)
-        // Clear any pending timeouts
-        if (scrollIndicatorTimeoutRef.current) {
-          clearTimeout(scrollIndicatorTimeoutRef.current)
-          scrollIndicatorTimeoutRef.current = null
-        }
-        if (scrollIndicatorHideTimeoutRef.current) {
-          clearTimeout(scrollIndicatorHideTimeoutRef.current)
-          scrollIndicatorHideTimeoutRef.current = null
-        }
-      }
-    }
-
-    container.addEventListener('scroll', handleScroll, { passive: true })
-    container.addEventListener('touchstart', handleTouchStart, { passive: true })
-    container.addEventListener('touchmove', handleTouchStart, { passive: true })
-    
-    return () => {
-      container.removeEventListener('scroll', handleScroll)
-      container.removeEventListener('touchstart', handleTouchStart)
-      container.removeEventListener('touchmove', handleTouchStart)
-    }
-  }, [hasUserScrolled])
-
-  // Cleanup timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (scrollIndicatorTimeoutRef.current) {
-        clearTimeout(scrollIndicatorTimeoutRef.current)
-      }
-      if (scrollIndicatorHideTimeoutRef.current) {
-        clearTimeout(scrollIndicatorHideTimeoutRef.current)
-      }
-    }
   }, [])
-  
-  const loadMoreVideos = useCallback(async () => {
-    if (isLoadingMoreRef.current || !hasMoreVideos) return
-    isLoadingMoreRef.current = true
-    setIsLoadingMore(true)
 
+  // Load more videos
+  const loadMoreVideos = useCallback(async () => {
+    if (isLoadingMore || !hasMoreVideos) return
+    
+    setIsLoadingMore(true)
     try {
       const nextPage = currentPage + 1
       const url = `/api/videos/${collectionId}?page=${nextPage}&limit=3&shuffle=${isShuffled}`
@@ -290,7 +137,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       if (response.videos.length > 0) {
         setAllVideos(prev => {
           const newVideos = [...prev, ...response.videos]
-          // Expand video refs array to accommodate new videos
           videoRefs.current = [...videoRefs.current, ...new Array(response.videos.length).fill(null)]
           return newVideos
         })
@@ -302,81 +148,94 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     } catch (error) {
       console.error('Failed to load more videos:', error)
     } finally {
-      isLoadingMoreRef.current = false
       setIsLoadingMore(false)
     }
-  }, [collectionId, currentPage, hasMoreVideos, isShuffled, fetcher])
+  }, [collectionId, currentPage, hasMoreVideos, isShuffled, fetcher, isLoadingMore])
 
+  // Intersection Observer for video switching
   useEffect(() => {
-    // Load more videos when we're at the second-to-last video (1 video remaining)
-    if (currentVideoIndex >= allVideos.length - 2 && hasMoreVideos) {
-      loadMoreVideos()
+    if (observerRef.current) observerRef.current.disconnect()
+    
+    observerRef.current = new IntersectionObserver((entries) => {
+      let mostVisibleEntry: IntersectionObserverEntry | null = null
+      
+      for (const entry of entries) {
+        if (!mostVisibleEntry || entry.intersectionRatio > mostVisibleEntry.intersectionRatio) {
+          mostVisibleEntry = entry
+        }
+      }
+
+      if (mostVisibleEntry && mostVisibleEntry.intersectionRatio > 0.5) {
+        const index = parseInt((mostVisibleEntry.target as HTMLElement).dataset.index || '0')
+        const previousIndex = currentVideoIndex
+        setCurrentVideoIndex(index)
+        
+        // Hide scroll hint if user has scrolled to different video
+        if (index !== previousIndex && !hasUserScrolled) {
+          setHasUserScrolled(true)
+          setShowScrollHint(false)
+        }
+      }
+    }, { 
+      root: containerRef.current, 
+      threshold: [0.5, 0.7, 0.9]
+    })
+
+    videoRefs.current.forEach(video => {
+      if (video) observerRef.current?.observe(video)
+    })
+
+    return () => observerRef.current?.disconnect()
+  }, [allVideos.length, currentVideoIndex, hasUserScrolled])
+
+  // Autoplay current video
+  useEffect(() => {
+    const video = videoRefs.current[currentVideoIndex]
+    if (video && video.paused) {
+      setTimeout(() => playVideo(currentVideoIndex), 300)
     }
-  }, [currentVideoIndex, allVideos.length, hasMoreVideos, loadMoreVideos])
+  }, [currentVideoIndex, playVideo])
 
-  // Aggressive preloading - load next batch when we're at the last video of current batch
+  // Load more videos when needed
   useEffect(() => {
-    // If we have videos and we're at the last video, preload more
-    if (allVideos.length > 0 && currentVideoIndex === allVideos.length - 1 && hasMoreVideos && !isLoadingMore) {
+    if (currentVideoIndex >= allVideos.length - 2 && hasMoreVideos && !isLoadingMore) {
       loadMoreVideos()
     }
   }, [currentVideoIndex, allVideos.length, hasMoreVideos, isLoadingMore, loadMoreVideos])
 
-  const handleVideoError = useCallback((index: number) => {
-    const currentAttempts = retryAttemptsRef.current[index] || 0;
-    if (currentAttempts < 2) { // Retry up to 2 times
-      console.log(`🔄 Retrying video ${index}, attempt ${currentAttempts + 1}`);
-      retryAttemptsRef.current[index] = currentAttempts + 1;
-      const video = videoRefs.current[index];
-      if (video) {
-        // Wait a bit before retrying
-        setTimeout(() => {
-          video.load(); // This will re-trigger loading
-        }, 500 * (currentAttempts + 1)); // Exponential backoff
-      }
-    } else {
-      console.error(`❌ Video ${index} failed after multiple attempts.`);
-      setFailedVideos(prev => ({ ...prev, [index]: true }));
-    }
-  }, []);
-
-  const toggleGlobalMute = useCallback(() => setGlobalMuted(prev => !prev), [])
-
+  // Handle video download
   const handleVideoDownload = useCallback((video: FastVideo) => {
-    onVideoDownload(video.streamUrl, `${video.name.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`)
+    onVideoDownload(video.directUrl, `${video.name.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`)
   }, [onVideoDownload])
 
-  // Prefetch next videos for smoother playback
-  const prefetchNextVideos = useCallback(() => {
-    const nextVideosToPreload = 2 // Preload next 2 videos
-    const startIndex = currentVideoIndex + 1
-    
-    for (let i = startIndex; i < Math.min(startIndex + nextVideosToPreload, allVideos.length); i++) {
-      const video = allVideos[i]
-      if (video) {
-        // Create a prefetch link element
-        const link = document.createElement('link')
-        link.rel = 'prefetch'
-        link.href = video.streamUrl
-        link.as = 'video'
-        document.head.appendChild(link)
-        
-        // Remove after a short delay to avoid cluttering the head
-        setTimeout(() => {
-          if (document.head.contains(link)) {
-            document.head.removeChild(link)
-          }
-        }, 5000)
-      }
-    }
-  }, [currentVideoIndex, allVideos])
+  // Handle video errors with automatic retries
+  const handleVideoError = useCallback((index: number) => {
+    const maxRetries = 3
+    const currentRetryCount = retryCounts.current[index] || 0
 
-  // Trigger prefetch when current video changes
-  useEffect(() => {
-    if (allVideos.length > 0) {
-      prefetchNextVideos()
+    if (currentRetryCount < maxRetries) {
+      retryCounts.current[index] = currentRetryCount + 1
+      
+      setTimeout(() => {
+        const video = videoRefs.current[index]
+        if (video) {
+          console.log(`Retrying video ${index}, attempt ${currentRetryCount + 1}`)
+          video.load()
+          // If it's the current video, try to play it after loading
+          if (index === currentVideoIndex) {
+            playVideo(index).catch(err => {
+              console.error(`Retry play failed for video ${index}:`, err)
+              // If playing still fails after load, mark as failed
+              setFailedVideos(prev => ({ ...prev, [index]: true }))
+            })
+          }
+        }
+      }, 1000 * (currentRetryCount + 1)) // Exponential backoff
+    } else {
+      console.error(`Video ${index} failed after ${maxRetries} retries.`)
+      setFailedVideos(prev => ({ ...prev, [index]: true }))
     }
-  }, [currentVideoIndex, allVideos.length, prefetchNextVideos])
+  }, [currentVideoIndex, playVideo])
 
   return (
     <div 
@@ -387,139 +246,76 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         msOverflowStyle: 'none',
         scrollSnapType: 'y mandatory',
         scrollSnapStop: 'always',
-        willChange: 'scroll-position',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)'
       }}
     >
       {allVideos.map((video, index) => {
+        // Skip invalid videos
+        if (!video.directUrl || !video.directUrl.startsWith('http')) {
+          return null
+        }
+        
+        // Determine preload state
+        const isCurrent = index === currentVideoIndex
+        const isNext = index === currentVideoIndex + 1
+        const isPrev = index === currentVideoIndex - 1
+        const preload = isCurrent || isNext || isPrev ? 'auto' : 'metadata'
+        
         return (
           <div
             key={`${video.id}-${index}`}
             className="w-full h-full relative flex items-center justify-center"
-            data-video-container
-            style={{ 
-              scrollSnapAlign: 'center',
-            }}
+            style={{ scrollSnapAlign: 'center' }}
           >
             <div 
-              className="relative w-full h-full max-w-sm max-h-[680px] mx-auto bg-black rounded-lg overflow-hidden flex items-center justify-center p-4 lg:p-2 xl:p-1" 
+              className="relative w-full h-full max-w-sm max-h-[680px] mx-auto bg-black rounded-lg overflow-hidden flex items-center justify-center p-4" 
               style={{ aspectRatio: '9/16' }}
             >
               <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
-              {!failedVideos[index] ? (
-                <video
-                  ref={el => { videoRefs.current[index] = el }}
-                  data-index={index}
-                  className="w-full h-full object-cover rounded-lg"
-                  controls={false}
-                  playsInline
-                  loop
-                  muted={globalMuted}
-                  preload={
-                    // Aggressively preload current, next, and previous video
-                    Math.abs(index - currentVideoIndex) <= 1 ? "auto" : "metadata"
-                  }
-                  crossOrigin="anonymous"
-                  onClick={() => togglePlayPause(index)}
-                  onPlay={() => setPlayingStates(prev => ({ ...prev, [index]: true }))}
-                  onPause={() => setPlayingStates(prev => ({ ...prev, [index]: false }))}
+                <VideoPlayer
+                  video={video}
+                  index={index}
+                  isFailed={failedVideos[index] || false}
+                  globalMuted={globalMuted}
+                  preload={preload}
+                  onTogglePlayPause={() => togglePlayPause(index)}
+                  onPlay={() => {
+                    // Reset retry count on successful play
+                    if (retryCounts.current[index]) {
+                      delete retryCounts.current[index]
+                    }
+                  }}
+                  onPause={() => {}}
                   onError={() => handleVideoError(index)}
-                  src={video.streamUrl}
+                  videoRef={(el) => { 
+                    if (el) {
+                      // Set default pause reason for new video elements
+                      el.dataset.pauseReason = 'auto'
+                    }
+                    videoRefs.current[index] = el 
+                  }}
                 />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900 text-white rounded-lg">
-                  <p className="font-semibold">Could not load video</p>
-                  <p className="text-sm text-zinc-400">Please try again later.</p>
-                </div>
-              )}
-              
-              {/* Loading Overlay - Remove individual video loading indicators since we have a global one */}
 
-              {/* Play/Pause Button */}
-              {!playingStates[index] && !failedVideos[index] && (index === 0 || manuallyPaused[index]) && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-20 h-20 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60 pointer-events-auto"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      togglePlayPause(index);
-                    }}
-                  >
-                    <Play className="w-10 h-10 ml-2" />
-                  </Button>
-                </div>
-              )}
-
-              {/* Control Buttons */}
-              <div className="absolute bottom-6 right-4 z-10 flex flex-col gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60"
-                  onClick={(e) => { e.stopPropagation(); toggleGlobalMute(); }}
-                >
-                  {globalMuted ? <VolumeX /> : <Volume2 />}
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-sm text-white hover:bg-black/60"
-                  onClick={(e) => { e.stopPropagation(); handleVideoDownload(video); }}
-                >
-                  <Download />
-                </Button>
-              </div>
+                <VideoControls
+                  globalMuted={globalMuted}
+                  onToggleMute={toggleGlobalMute}
+                  onDownload={() => handleVideoDownload(video)}
+                />
               </div>
             </div>
           </div>
         )
       })}
-      
-      <div ref={loadMoreRef} className="h-20" />
 
-      {/* Scroll Indicator */}
-      {showScrollIndicator && (
-        <div className="fixed left-1/2 bottom-20 transform -translate-x-1/2 z-40 pointer-events-none">
-          <div className="flex items-center justify-center px-3 py-2 bg-black/40 backdrop-blur-sm rounded-2xl border border-white/20">
-            <div className="relative w-0.5 h-12 bg-white/30 rounded-full overflow-hidden">
-              <div 
-                className="absolute w-full h-6 bg-gradient-to-t from-white to-white/60 rounded-full"
-                style={{ 
-                  animation: 'slideUp 2s ease-in-out infinite 0.5s',
-                }} 
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <ScrollIndicator 
+        isVisible={showScrollHint && allVideos.length > 1}
+        onDismiss={() => {
+          setShowScrollHint(false)
+          setHasUserScrolled(true)
+        }}
+      />
 
-      <style dangerouslySetInnerHTML={{
-        __html: `
-          @keyframes slideUp {
-            0% {
-              transform: translateY(100%);
-              opacity: 0;
-            }
-            50% {
-              transform: translateY(-50%);
-              opacity: 1;
-            }
-            100% {
-              transform: translateY(-200%);
-              opacity: 0;
-            }
-          }
-        `
-      }} />
-
-      {(isLoading || isLoadingMore) && (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
-        </div>
-      )}
+      <LoadingSpinner isVisible={isLoading || isLoadingMore} />
     </div>
-  );
+  )
 }

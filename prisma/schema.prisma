@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -19,15 +13,14 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -47,10 +40,10 @@ model User {
   emailVerified DateTime?
   image         String?
   password      String?
-  accounts      Account[]
-  sessions      Session[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
 }
 
 model VerificationToken {
@@ -61,17 +54,11 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-model Video {
-  id             String    @id @default(cuid())
-  s3Key          String    @unique // The original S3 key
-  size           String    // Formatted file size
-  streamUrl      String    // The proxy URL for streaming
-  thumbnailUrl   String?   // Thumbnail URL if available
-  collection     String    // Collection identifier
-  lastModified   DateTime  // Last modified date from R2
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+model LuxuryVideos {
+  id           String @id @default(cuid())
+  s3Key        String @unique
+  thumbnailUrl String
+  videoUrl     String
 
-  @@index([collection])
-  @@index([lastModified])
+  @@index([s3Key])
 }

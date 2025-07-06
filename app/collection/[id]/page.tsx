@@ -17,6 +17,9 @@ interface FastVideo {
   directUrl: string
   embedUrl: string
   thumbnailUrl: string
+  hlsManifestUrl?: string
+  hlsAvailable?: boolean
+  streamingType?: 'mp4' | 'hls'
   lastModified: Date
 }
 
@@ -29,16 +32,7 @@ interface VideoResponse {
   nextToken?: string
 }
 
-// Transform FastVideo to VideoItem for GridView compatibility
-const transformVideoForGrid = (video: FastVideo) => ({
-  key: video.id,
-  url: video.streamUrl,
-  thumbnailUrl: video.thumbnailUrl,
-  downloadUrl: video.streamUrl,
-  name: video.name,
-  size: video.size,
-  lastModified: video.lastModified.toString()
-})
+// No transformation needed - API returns correct format for GridView
 
 export default function CollectionPage() {
   const params = useParams()
@@ -114,7 +108,7 @@ export default function CollectionPage() {
   const gridCollection = gridData ? {
     id: collectionId,
     name: 'Collection',
-    videos: gridData.videos.map(transformVideoForGrid),
+    videos: gridData.videos, // Use videos directly - no transformation needed
     totalVideos: gridData.totalCount,
     hasMore: gridData.hasMore,
     totalPages: Math.ceil(gridData.totalCount / 12),

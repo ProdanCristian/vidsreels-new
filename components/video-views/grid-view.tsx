@@ -6,11 +6,20 @@ import { Button } from "@/components/ui/button"
 import { Download, Play, Volume2, VolumeX, Pause } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-// Assuming the video object has at least 'key' and 'name' properties.
-// A more specific type can be imported if available.
+
+// Video interface matching the LuxuryVideos API response
 interface Video {
-  key: string
+  id: string
   name: string
+  size: string
+  streamUrl: string
+  directUrl: string
+  embedUrl: string
+  thumbnailUrl: string
+  hlsManifestUrl?: string
+  hlsAvailable?: boolean
+  streamingType?: 'mp4' | 'hls'
+  lastModified: Date
 }
 
 interface GridViewProps {
@@ -25,19 +34,14 @@ interface GridViewProps {
 const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, onVideoDownload }: GridViewProps) => {
   const [isPlaying, setIsPlaying] = useState<boolean[]>(Array(videos.length).fill(false))
   const [isMuted, setIsMuted] = useState<boolean[]>(Array(videos.length).fill(false))
+  const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set())
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([])
 
   useEffect(() => {
     videoRefs.current = videoRefs.current.slice(0, videos.length)
   }, [videos])
 
-  const getThumbnailUrl = (videoKey: string): string => {
-    const filename = videoKey.split('/').pop() || '';
-    const lastDotIndex = filename.lastIndexOf('.');
-    // If there's no dot, or it's the first character, use the whole filename
-    const baseName = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
-    return `/api/video-proxy/${encodeURIComponent(baseName)}.webp`;
-  };
+
 
   // Effect to handle playing/pausing videos when state changes
   useEffect(() => {
@@ -107,29 +111,52 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
           {videos.map((video, index) => (
             <div 
-              key={`${video.key}-${index}`} 
+              key={`${video.id}-${index}`} 
               className="relative aspect-[9/16] bg-black rounded-lg overflow-hidden group cursor-pointer"
               onClick={() => togglePlayPause(index)}
             >
-              {/* Thumbnail Image */}
+              {/* Thumbnail Image - Smart loading with 404 prevention */}
               <Image
-                src={getThumbnailUrl(video.key)}
+                src={failedThumbnails.has(video.thumbnailUrl) ? '/video-placeholder.png' : video.thumbnailUrl}
+                key={`${video.thumbnailUrl}-${failedThumbnails.has(video.thumbnailUrl) ? 'placeholder' : 'original'}`}
                 alt={video.name}
                 fill
+                sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 className={cn(
                   'object-cover transition-opacity duration-300 ease-in-out group-hover:scale-105',
                   isPlaying[index] ? 'opacity-0' : 'opacity-100'
                 )}
+                priority={index < 8} // Prioritize loading first 8 thumbnails
+                placeholder="blur"
+                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/video-placeholder.png';
+                  // Prevent multiple error events for the same thumbnail
+                  if (failedThumbnails.has(video.thumbnailUrl)) {
+                    return; // Already marked as failed, ignore additional error events
+                  }
+                  
+                  console.log(`⚠️ Thumbnail failed for ${video.name}:`, video.thumbnailUrl);
+                  
+                  // Mark this thumbnail as failed to prevent future requests
+                  setFailedThumbnails(prev => {
+                    const newSet = new Set(prev)
+                    newSet.add(video.thumbnailUrl)
+                    return newSet
+                  })
+                  
+                  // Immediately switch to placeholder to stop error loop
+                  if (e.target instanceof HTMLImageElement) {
+                    e.target.src = '/video-placeholder.png'
+                  }
                 }}
               />
 
               {/* Video Player */}
               {isPlaying[index] && (
                 <video
-                  ref={(el) => { videoRefs.current[index] = el }}
+                  ref={(el: HTMLVideoElement | null) => { videoRefs.current[index] = el }}
                   className="absolute inset-0 w-full h-full object-cover"
+                  controls={false}
                   loop
                   playsInline
                   muted={isMuted[index]}
@@ -138,8 +165,12 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
                     newIsPlaying[index] = false
                     setIsPlaying(newIsPlaying)
                   }}
-                  src={`/api/video-proxy/${encodeURIComponent(video.key)}`}
-                />
+                >
+                  <source src={video.directUrl} type="video/mp4" />
+                  <p className="text-white text-center p-4">
+                    Your browser does not support the video tag or MP4 format.
+                  </p>
+                </video>
               )}
               
               {/* Play/Pause Overlay */}
@@ -191,7 +222,7 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation()
-                    onVideoDownload(video.key, video.name)
+                    onVideoDownload(video.directUrl, video.name)
                   }}
                   className="border-none bg-black/50 backdrop-blur-sm text-white hover:bg-black/70 rounded-full p-2 h-8 w-8"
                 >
