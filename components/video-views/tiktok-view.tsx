@@ -36,7 +36,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   
   // Video state management
-  const [isVideoSwitching, setIsVideoSwitching] = useState(false)
   const [isFastScrolling, setIsFastScrolling] = useState(false)
   const [pendingVideoIndex, setPendingVideoIndex] = useState<number | null>(null)
 
@@ -52,8 +51,38 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
 
-  // Detect fast scrolling
-  const detectScrollVelocity = useCallback(() => {
+
+
+  // Get the video that's currently most visible in viewport
+  const getCurrentVideoInViewport = useCallback(() => {
+    const container = containerRef.current
+    if (!container || allVideos.length === 0) return null
+
+    const containerRect = container.getBoundingClientRect()
+    const containerCenter = containerRect.top + containerRect.height / 2
+
+    let closestIndex = 0
+    let closestDistance = Infinity
+
+    // Check each video element to find which one is closest to the center
+    videoRefs.current.forEach((videoElement, index) => {
+      if (videoElement) {
+        const videoRect = videoElement.getBoundingClientRect()
+        const videoCenter = videoRect.top + videoRect.height / 2
+        const distance = Math.abs(videoCenter - containerCenter)
+
+        if (distance < closestDistance) {
+          closestDistance = distance
+          closestIndex = index
+        }
+      }
+    })
+
+    return closestIndex
+  }, [allVideos.length])
+
+  // Setup scroll velocity detection with viewport checking
+  useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
@@ -61,8 +90,16 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       const currentTime = Date.now()
       const timeDiff = currentTime - lastScrollTimeRef.current
       
+      // Always check which video is currently in viewport
+      const videoInViewport = getCurrentVideoInViewport()
+      
       if (timeDiff < 100) { // Fast scrolling if less than 100ms between scroll events
         setIsFastScrolling(true)
+        
+        // Immediately update to the video in viewport during fast scrolling
+        if (videoInViewport !== null && videoInViewport !== currentVideoIndex) {
+          setPendingVideoIndex(videoInViewport)
+        }
         
         // Clear existing timeout
         if (scrollTimeoutRef.current) {
@@ -73,13 +110,18 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         scrollTimeoutRef.current = setTimeout(() => {
           setIsFastScrolling(false)
           // Process any pending video switch
-          if (pendingVideoIndex !== null) {
-            setCurrentVideoIndex(pendingVideoIndex)
+          const finalVideoInViewport = getCurrentVideoInViewport()
+          if (finalVideoInViewport !== null) {
+            setCurrentVideoIndex(finalVideoInViewport)
             setPendingVideoIndex(null)
           }
-        }, 300) // Consider fast scrolling stopped after 300ms of no scroll
+        }, 200) // Reduced timeout for faster response
       } else {
         setIsFastScrolling(false)
+        // Update immediately for normal scrolling
+        if (videoInViewport !== null && videoInViewport !== currentVideoIndex) {
+          setCurrentVideoIndex(videoInViewport)
+        }
       }
       
       lastScrollTimeRef.current = currentTime
@@ -87,12 +129,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
     return () => container.removeEventListener('scroll', handleScroll)
-  }, [pendingVideoIndex])
-
-  // Setup scroll velocity detection
-  useEffect(() => {
-    return detectScrollVelocity()
-  }, [detectScrollVelocity])
+  }, [getCurrentVideoInViewport, currentVideoIndex])
 
   // Initialize videos when data loads
   useEffect(() => {
@@ -105,7 +142,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       // Ensure we start at the first video and scroll to top
       setCurrentVideoIndex(0)
       setIsInitialLoad(true)
-      setIsVideoSwitching(false)
       setIsFastScrolling(false)
       setPendingVideoIndex(null)
       
@@ -132,7 +168,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setShowScrollHint(true)
       setHasUserScrolled(false)
       setIsInitialLoad(true)
-      setIsVideoSwitching(false)
       setIsFastScrolling(false)
       setPendingVideoIndex(null)
     }
@@ -165,14 +200,10 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     const video = videoRefs.current[index]
     const videoData = allVideos[index]
     
-    if (!video || !videoData?.directUrl || (isVideoSwitching && !isFastScrolling)) return
+    if (!video || !videoData?.directUrl) return
     
     try {
-      if (!isFastScrolling) {
-        setIsVideoSwitching(true)
-      }
-      
-      // First, pause all other videos
+      // Always pause other videos first, regardless of fast scrolling
       await pauseAllVideosExcept(index)
       
       // Configure video
@@ -190,11 +221,9 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         console.warn(`An unknown autoplay error occurred for video ${index}.`)
       }
     } finally {
-      if (!isFastScrolling) {
-        setIsVideoSwitching(false)
-      }
+      // Cleanup handled by the caller
     }
-  }, [globalMuted, allVideos, pauseAllVideosExcept, isVideoSwitching, isFastScrolling])
+  }, [globalMuted, allVideos, pauseAllVideosExcept, isFastScrolling])
 
   // Toggle play/pause
   const togglePlayPause = useCallback(async (index: number) => {
@@ -271,17 +300,19 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
           setCurrentVideoIndex(pendingVideoIndex)
           setPendingVideoIndex(null)
         }
-      }, 150) // 150ms debounce for fast scrolling
+      }, 100) // Reduced debounce time for faster response
     } else {
       setCurrentVideoIndex(newIndex)
     }
   }, [isFastScrolling, pendingVideoIndex])
 
-  // Enhanced intersection observer for fast scrolling
+  // Simplified intersection observer (as backup to scroll-based detection)
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect()
     
     observerRef.current = new IntersectionObserver((entries) => {
+      if (isInitialLoad) return // Skip during initial load
+      
       let mostVisibleEntry: IntersectionObserverEntry | null = null
       
       // Find the most visible video in the viewport
@@ -292,31 +323,31 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       }
 
       // Lower threshold for fast scrolling, higher for normal scrolling
-      const requiredThreshold = isFastScrolling ? 0.3 : 0.6
+      const requiredThreshold = isFastScrolling ? 0.2 : 0.5
 
       if (mostVisibleEntry && mostVisibleEntry.intersectionRatio > requiredThreshold) {
         const index = parseInt((mostVisibleEntry.target as HTMLElement).dataset.index || '0')
+        const currentIndex = isFastScrolling ? (pendingVideoIndex ?? currentVideoIndex) : currentVideoIndex
         
-        // Don't change video index during initial load
-        if (!isInitialLoad) {
-          const currentIndex = isFastScrolling ? (pendingVideoIndex ?? currentVideoIndex) : currentVideoIndex
+        if (index !== currentIndex) {
+          // If this is the first time the user is scrolling, hide the scroll hint
+          if (!hasUserScrolled) {
+            setHasUserScrolled(true)
+            setShowScrollHint(false)
+          }
           
-          if (index !== currentIndex) {
-            // If this is the first time the user is scrolling, hide the scroll hint
-            if (!hasUserScrolled) {
-              setHasUserScrolled(true)
-              setShowScrollHint(false)
-            }
-            
+          // Only use intersection observer if scroll-based detection missed it
+          const viewportVideo = getCurrentVideoInViewport()
+          if (viewportVideo === null || viewportVideo === index) {
             setVideoIndexDebounced(index)
           }
         }
       }
     }, { 
       root: containerRef.current,
-      // Multiple thresholds for better detection during fast scrolling
-      threshold: [0.1, 0.3, 0.5, 0.6, 0.8, 1.0],
-      rootMargin: '0px 0px -10% 0px' // Trigger slightly before fully visible
+      // Fewer thresholds for better performance
+      threshold: [0.2, 0.5, 0.8],
+      rootMargin: '0px 0px -5% 0px'
     })
 
     videoRefs.current.forEach(video => {
@@ -324,7 +355,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     })
 
     return () => observerRef.current?.disconnect()
-  }, [allVideos.length, hasUserScrolled, isInitialLoad, isFastScrolling, currentVideoIndex, pendingVideoIndex, setVideoIndexDebounced])
+  }, [allVideos.length, hasUserScrolled, isInitialLoad, isFastScrolling, currentVideoIndex, pendingVideoIndex, setVideoIndexDebounced, getCurrentVideoInViewport])
 
   // Autoplay current video with improved timing for fast scrolling
   useEffect(() => {
@@ -345,8 +376,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       playVideo(targetIndex)
     }
 
-    // Adjust delay based on scrolling speed
-    const delay = isFastScrolling ? 100 : 300
+    // Much faster response for fast scrolling
+    const delay = isFastScrolling ? 50 : 200
 
     playVideoTimeoutRef.current = setTimeout(() => {
       // Check if video is ready to play
