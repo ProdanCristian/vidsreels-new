@@ -28,10 +28,42 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const [showScrollHint, setShowScrollHint] = useState(true)
   const [hasUserScrolled, setHasUserScrolled] = useState(false)
 
-
+  // User interaction state for mobile autoplay
+  const [hasUserInteracted, setHasUserInteracted] = useState(false)
   
   // Flag to prevent immediate observer changes on initial load
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+
+  // Detect mobile Safari
+  const isMobileSafari = useCallback(() => {
+    if (typeof window === 'undefined') return false
+    const ua = window.navigator.userAgent
+    return /iPad|iPhone|iPod/.test(ua) && /Safari/.test(ua) && !/Chrome/.test(ua)
+  }, [])
+
+  // Add user interaction listeners for mobile autoplay
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      setHasUserInteracted(true)
+      // Remove listeners after first interaction
+      document.removeEventListener('touchstart', handleUserInteraction)
+      document.removeEventListener('click', handleUserInteraction)
+    }
+
+    // Add listeners for mobile
+    if (isMobileSafari()) {
+      document.addEventListener('touchstart', handleUserInteraction, { passive: true })
+      document.addEventListener('click', handleUserInteraction)
+    } else {
+      // For desktop, assume user has interacted
+      setHasUserInteracted(true)
+    }
+
+    return () => {
+      document.removeEventListener('touchstart', handleUserInteraction)
+      document.removeEventListener('click', handleUserInteraction)
+    }
+  }, [isMobileSafari])
 
   const fetcher = useCallback(async (url: string): Promise<VideoResponse> => {
     const response = await fetch(url)
@@ -83,9 +115,21 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     }
   }, [isShuffled])
 
+  // Improved function to pause all videos except the current one
+  const pauseAllVideosExcept = useCallback((currentIndex: number) => {
+    videoRefs.current.forEach((video, index) => {
+      if (video && index !== currentIndex && !video.paused) {
+        video.dataset.pauseReason = 'auto'
+        video.pause()
+        // Force immediate pause for mobile Safari
+        if (isMobileSafari()) {
+          video.currentTime = video.currentTime
+        }
+      }
+    })
+  }, [isMobileSafari])
 
-
-  // Play video function
+  // Play video function with better mobile Safari handling
   const playVideo = useCallback(async (index: number) => {
     const video = videoRefs.current[index]
     const videoData = allVideos[index]
@@ -93,31 +137,45 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     if (!video || !videoData?.directUrl) return
     
     try {
-      // Pause all other videos automatically
-      videoRefs.current.forEach((v, i) => {
-        if (v && i !== index && !v.paused) {
-          v.dataset.pauseReason = 'auto' // Set reason for automatic pause
-          v.pause()
-        }
-      })
+      // First, pause all other videos
+      pauseAllVideosExcept(index)
+      
+      // Wait a bit for other videos to pause (important for mobile Safari)
+      await new Promise(resolve => setTimeout(resolve, 100))
       
       // Set up video for autoplay
       video.muted = globalMuted
       video.volume = globalMuted ? 0 : 1
       
+      // For mobile Safari, ensure video is properly configured
+      if (isMobileSafari()) {
+        video.setAttribute('playsinline', 'true')
+        video.setAttribute('webkit-playsinline', 'true')
+        
+        // Only attempt autoplay if user has interacted
+        if (!hasUserInteracted) {
+          console.log('Waiting for user interaction before autoplay on mobile Safari')
+          return
+        }
+      }
+      
       if (video.paused) {
         await video.play()
       }
     } catch (error) {
-      // This catch is important for mobile autoplay issues.
-      // Browsers often block `play()` if not initiated by user action or if the video isn't ready.
+      // Enhanced error handling for mobile Safari
       if (error instanceof Error) {
         console.warn(`Autoplay for video ${index} was prevented. Error: ${error.name} - ${error.message}`)
+        
+        // For mobile Safari, this is often expected behavior
+        if (isMobileSafari() && error.name === 'NotAllowedError') {
+          console.log('Mobile Safari autoplay blocked - user interaction required')
+        }
       } else {
         console.warn(`An unknown autoplay error occurred for video ${index}.`)
       }
     }
-  }, [globalMuted, allVideos])
+  }, [globalMuted, allVideos, pauseAllVideosExcept, isMobileSafari, hasUserInteracted])
 
   // Toggle play/pause
   const togglePlayPause = useCallback(async (index: number) => {
@@ -127,7 +185,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     if (video.paused) {
       await playVideo(index)
     } else {
-      video.dataset.pauseReason = 'manual' // Set reason for manual pause
+      video.dataset.pauseReason = 'manual'
       video.pause()
     }
   }, [playVideo])
@@ -163,8 +221,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         setAllVideos(prev => {
           const newVideos = [...prev, ...response.videos]
           videoRefs.current = [...videoRefs.current, ...new Array(response.videos.length).fill(null)]
-          
-
           
           return newVideos
         })
@@ -228,9 +284,9 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     })
 
     return () => observerRef.current?.disconnect()
-  }, [allVideos.length, hasUserScrolled, isInitialLoad]) // Dependencies are simplified for stability.
+  }, [allVideos.length, hasUserScrolled, isInitialLoad])
 
-  // Autoplay current video with readiness check
+  // Autoplay current video with readiness check and mobile Safari handling
   useEffect(() => {
     const video = videoRefs.current[currentVideoIndex];
     if (!video || !video.paused) {
@@ -242,27 +298,32 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       playVideo(currentVideoIndex);
     };
 
-    // readyState >= 3 means the video has enough data to start playing.
-    if (video.readyState >= 3) {
-      attemptPlay();
-    } else {
-      // If the video is not ready, we wait for the 'canplay' event.
-      // This is the browser telling us it's now safe to call .play()
-      const onCanPlay = () => {
+    // For mobile Safari, add additional delay to ensure proper video switching
+    const delay = isMobileSafari() ? 200 : 0;
+    
+    const timeoutId = setTimeout(() => {
+      // readyState >= 3 means the video has enough data to start playing.
+      if (video.readyState >= 3) {
         attemptPlay();
-      };
-      
-      // We use `{ once: true }` to ensure the event listener is automatically removed
-      // after it fires, preventing memory leaks.
-      video.addEventListener('canplay', onCanPlay, { once: true });
+      } else {
+        // If the video is not ready, we wait for the 'canplay' event.
+        const onCanPlay = () => {
+          attemptPlay();
+        };
+        
+        video.addEventListener('canplay', onCanPlay, { once: true });
 
-      // The cleanup function for this effect will remove the listener if the user
-      // scrolls away before the video becomes playable.
-      return () => {
-        video.removeEventListener('canplay', onCanPlay);
-      };
-    }
-  }, [currentVideoIndex, playVideo]);
+        // Cleanup function
+        return () => {
+          video.removeEventListener('canplay', onCanPlay);
+        };
+      }
+    }, delay);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [currentVideoIndex, playVideo, isMobileSafari]);
 
   // Load more videos when needed (when user is 5 videos away from the end)
   useEffect(() => {
@@ -340,7 +401,11 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                       // Set default pause reason for new video elements
                       el.dataset.pauseReason = 'auto'
                       
-                                             
+                      // Configure mobile Safari specific attributes
+                      if (isMobileSafari()) {
+                        el.setAttribute('playsinline', 'true')
+                        el.setAttribute('webkit-playsinline', 'true')
+                      }
                     }
                     videoRefs.current[index] = el 
                   }}
@@ -351,8 +416,6 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                   onToggleMute={toggleGlobalMute}
                   onDownload={() => handleVideoDownload(video)}
                 />
-
-                
               </div>
             </div>
           </div>
@@ -366,6 +429,13 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
           setHasUserScrolled(true)
         }}
       />
+
+      {/* Show a message for mobile Safari users if autoplay is blocked */}
+      {isMobileSafari() && !hasUserInteracted && (
+        <div className="fixed bottom-20 left-4 right-4 bg-gray-800 text-white p-3 rounded-lg text-sm z-50">
+          Tap anywhere to enable video autoplay
+        </div>
+      )}
 
       {/* Global loading spinner only for initial load */}
       {isLoading && <LoadingSpinner isVisible={true} />}
