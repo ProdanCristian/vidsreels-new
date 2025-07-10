@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { VideoFile } from '@/types/video'
 import { prisma } from '@/lib/prisma'
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
 const CACHE_TTL = 300 // 5 minutes cache for video lists
 const MAX_BATCH_SIZE = 50 // Maximum videos per batch for optimal performance
+
+// Initialize R2 client
+const r2Client = new S3Client({
+  region: 'auto',
+  endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
+  },
+})
 
 /**
  * Get videos from LuxuryVideos table using stored URLs
@@ -103,6 +114,71 @@ async function getVideosFromDatabase(page: number, limit: number, shuffle: boole
   }
 }
 
+/**
+ * Delete video from R2 storage
+ */
+async function deleteVideoFromR2(s3Key: string): Promise<void> {
+  try {
+    console.log(`🗑️ Deleting video from R2: ${s3Key}`)
+    
+    const deleteCommand = new DeleteObjectCommand({
+      Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
+      Key: s3Key,
+    })
+    
+    await r2Client.send(deleteCommand)
+    console.log(`✅ Successfully deleted video from R2: ${s3Key}`)
+  } catch (error) {
+    console.error(`❌ Failed to delete video from R2: ${s3Key}`, error)
+    throw error
+  }
+}
+
+/**
+ * Delete thumbnail from R2 storage
+ */
+async function deleteThumbnailFromR2(thumbnailUrl: string): Promise<void> {
+  try {
+    // Extract the key from the thumbnail URL
+    const url = new URL(thumbnailUrl)
+    const thumbnailKey = url.pathname.substring(1) // Remove leading slash
+    
+    console.log(`🗑️ Deleting thumbnail from R2: ${thumbnailKey}`)
+    
+    const deleteCommand = new DeleteObjectCommand({
+      Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
+      Key: thumbnailKey,
+    })
+    
+    await r2Client.send(deleteCommand)
+    console.log(`✅ Successfully deleted thumbnail from R2: ${thumbnailKey}`)
+  } catch (error) {
+    console.error(`❌ Failed to delete thumbnail from R2: ${thumbnailUrl}`, error)
+    throw error
+  }
+}
+
+/**
+ * Delete video from database
+ */
+async function deleteVideoFromDatabase(s3Key: string): Promise<void> {
+  try {
+    console.log(`🗑️ Deleting video from database: ${s3Key}`)
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (prisma as any).luxuryVideos.delete({
+      where: {
+        s3Key: s3Key,
+      },
+    })
+    
+    console.log(`✅ Successfully deleted video from database: ${s3Key}`)
+  } catch (error) {
+    console.error(`❌ Failed to delete video from database: ${s3Key}`, error)
+    throw error
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ collectionId: string }> }
@@ -149,6 +225,76 @@ export async function GET(
     return NextResponse.json(
       { 
         error: 'Failed to fetch luxury videos',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    )
+  }
+} 
+
+export async function DELETE(
+  request: NextRequest
+) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const videoId = searchParams.get('videoId')
+    
+    if (!videoId) {
+      return NextResponse.json(
+        { error: 'Video ID (s3Key) is required' },
+        { status: 400 }
+      )
+    }
+
+    console.log(`🗑️ Delete request for video s3Key: ${videoId}`)
+
+    // Get video details before deletion
+    // Note: videoId is actually the s3Key from the frontend
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const video = await (prisma as any).luxuryVideos.findUnique({
+      where: {
+        s3Key: videoId,
+      },
+    })
+
+    if (!video) {
+      return NextResponse.json(
+        { error: 'Video not found', s3Key: videoId },
+        { status: 404 }
+      )
+    }
+
+    // Delete from R2 storage in parallel
+    const deletionPromises = []
+    
+    // Delete video file from R2
+    deletionPromises.push(deleteVideoFromR2(video.s3Key))
+    
+    // Delete thumbnail from R2 if it exists
+    if (video.thumbnailUrl) {
+      deletionPromises.push(deleteThumbnailFromR2(video.thumbnailUrl))
+    }
+    
+    // Delete from database (videoId is actually the s3Key)
+    deletionPromises.push(deleteVideoFromDatabase(videoId))
+
+    // Execute all deletions in parallel
+    await Promise.all(deletionPromises)
+
+    console.log(`✅ Successfully deleted video: ${videoId}`)
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Video deleted successfully',
+      s3Key: videoId,
+      videoId,
+    })
+
+  } catch (error) {
+    console.error('❌ Delete API Error:', error)
+    return NextResponse.json(
+      { 
+        error: 'Failed to delete video',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }

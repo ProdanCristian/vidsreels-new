@@ -28,6 +28,11 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const [showScrollHint, setShowScrollHint] = useState(true)
   const [hasUserScrolled, setHasUserScrolled] = useState(false)
 
+
+  
+  // Flag to prevent immediate observer changes on initial load
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+
   const fetcher = useCallback(async (url: string): Promise<VideoResponse> => {
     const response = await fetch(url)
     if (!response.ok) throw new Error(`Failed to fetch videos: ${response.statusText}`)
@@ -47,6 +52,21 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setHasMoreVideos(data.hasMore)
       setCurrentPage(data.page)
       videoRefs.current = new Array(data.videos.length).fill(null)
+      
+      // Ensure we start at the first video and scroll to top
+      setCurrentVideoIndex(0)
+      setIsInitialLoad(true)
+      
+      // Scroll to top after a brief delay to ensure DOM is ready
+      setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = 0
+        }
+        // Allow intersection observer to work after initial setup
+        setTimeout(() => {
+          setIsInitialLoad(false)
+        }, 500)
+      }, 100)
     }
   }, [data])
 
@@ -59,8 +79,11 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setHasMoreVideos(true)
       setShowScrollHint(true)
       setHasUserScrolled(false)
+      setIsInitialLoad(true)
     }
   }, [isShuffled])
+
+
 
   // Play video function
   const playVideo = useCallback(async (index: number) => {
@@ -140,6 +163,9 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         setAllVideos(prev => {
           const newVideos = [...prev, ...response.videos]
           videoRefs.current = [...videoRefs.current, ...new Array(response.videos.length).fill(null)]
+          
+
+          
           return newVideos
         })
         setCurrentPage(response.page)
@@ -173,20 +199,23 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       if (mostVisibleEntry && mostVisibleEntry.intersectionRatio > 0.6) {
         const index = parseInt((mostVisibleEntry.target as HTMLElement).dataset.index || '0')
         
-        setCurrentVideoIndex(currentIndex => {
-          // Only update state if the index has actually changed.
-          if (index === currentIndex) {
-            return currentIndex
-          }
+        // Don't change video index during initial load to prevent unwanted switching
+        if (!isInitialLoad) {
+          setCurrentVideoIndex(currentIndex => {
+            // Only update state if the index has actually changed.
+            if (index === currentIndex) {
+              return currentIndex
+            }
 
-          // If this is the first time the user is scrolling, hide the scroll hint.
-          if (!hasUserScrolled) {
-            setHasUserScrolled(true)
-            setShowScrollHint(false)
-          }
-          
-          return index
-        })
+            // If this is the first time the user is scrolling, hide the scroll hint.
+            if (!hasUserScrolled) {
+              setHasUserScrolled(true)
+              setShowScrollHint(false)
+            }
+            
+            return index
+          })
+        }
       }
     }, { 
       root: containerRef.current, 
@@ -199,7 +228,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     })
 
     return () => observerRef.current?.disconnect()
-  }, [allVideos.length, hasUserScrolled]) // Dependencies are simplified for stability.
+  }, [allVideos.length, hasUserScrolled, isInitialLoad]) // Dependencies are simplified for stability.
 
   // Autoplay current video with readiness check
   useEffect(() => {
@@ -310,6 +339,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                     if (el) {
                       // Set default pause reason for new video elements
                       el.dataset.pauseReason = 'auto'
+                      
+                                             
                     }
                     videoRefs.current[index] = el 
                   }}
@@ -320,6 +351,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                   onToggleMute={toggleGlobalMute}
                   onDownload={() => handleVideoDownload(video)}
                 />
+
+                
               </div>
             </div>
           </div>
@@ -334,7 +367,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         }}
       />
 
-      <LoadingSpinner isVisible={isLoading || isLoadingMore} />
+      {/* Global loading spinner only for initial load */}
+      {isLoading && <LoadingSpinner isVisible={true} />}
     </div>
   )
 }
