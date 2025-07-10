@@ -14,6 +14,9 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([])
   const observerRef = useRef<IntersectionObserver | null>(null)
   const playVideoTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastScrollTimeRef = useRef<number>(0)
+  const videoSwitchDebounceRef = useRef<NodeJS.Timeout | null>(null)
   
   // Core states
   const [allVideos, setAllVideos] = useState<FastVideo[]>([])
@@ -34,6 +37,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   
   // Video state management
   const [isVideoSwitching, setIsVideoSwitching] = useState(false)
+  const [isFastScrolling, setIsFastScrolling] = useState(false)
+  const [pendingVideoIndex, setPendingVideoIndex] = useState<number | null>(null)
 
   const fetcher = useCallback(async (url: string): Promise<VideoResponse> => {
     const response = await fetch(url)
@@ -47,6 +52,48 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
 
+  // Detect fast scrolling
+  const detectScrollVelocity = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const currentTime = Date.now()
+      const timeDiff = currentTime - lastScrollTimeRef.current
+      
+      if (timeDiff < 100) { // Fast scrolling if less than 100ms between scroll events
+        setIsFastScrolling(true)
+        
+        // Clear existing timeout
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current)
+        }
+        
+        // Set timeout to detect when fast scrolling stops
+        scrollTimeoutRef.current = setTimeout(() => {
+          setIsFastScrolling(false)
+          // Process any pending video switch
+          if (pendingVideoIndex !== null) {
+            setCurrentVideoIndex(pendingVideoIndex)
+            setPendingVideoIndex(null)
+          }
+        }, 300) // Consider fast scrolling stopped after 300ms of no scroll
+      } else {
+        setIsFastScrolling(false)
+      }
+      
+      lastScrollTimeRef.current = currentTime
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [pendingVideoIndex])
+
+  // Setup scroll velocity detection
+  useEffect(() => {
+    return detectScrollVelocity()
+  }, [detectScrollVelocity])
+
   // Initialize videos when data loads
   useEffect(() => {
     if (data?.videos) {
@@ -59,6 +106,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setCurrentVideoIndex(0)
       setIsInitialLoad(true)
       setIsVideoSwitching(false)
+      setIsFastScrolling(false)
+      setPendingVideoIndex(null)
       
       // Scroll to top after a brief delay to ensure DOM is ready
       setTimeout(() => {
@@ -84,6 +133,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setHasUserScrolled(false)
       setIsInitialLoad(true)
       setIsVideoSwitching(false)
+      setIsFastScrolling(false)
+      setPendingVideoIndex(null)
     }
   }, [isShuffled])
 
@@ -95,25 +146,31 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         try {
           video.pause()
           // For mobile Safari, ensure the video actually pauses
-          await new Promise(resolve => setTimeout(resolve, 50))
+          if (!isFastScrolling) {
+            await new Promise(resolve => setTimeout(resolve, 50))
+          }
         } catch (error) {
           console.warn(`Failed to pause video ${index}:`, error)
         }
       }
     })
     
-    await Promise.all(pausePromises)
-  }, [])
+    if (!isFastScrolling) {
+      await Promise.all(pausePromises)
+    }
+  }, [isFastScrolling])
 
   // Improved play video function
   const playVideo = useCallback(async (index: number) => {
     const video = videoRefs.current[index]
     const videoData = allVideos[index]
     
-    if (!video || !videoData?.directUrl || isVideoSwitching) return
+    if (!video || !videoData?.directUrl || (isVideoSwitching && !isFastScrolling)) return
     
     try {
-      setIsVideoSwitching(true)
+      if (!isFastScrolling) {
+        setIsVideoSwitching(true)
+      }
       
       // First, pause all other videos
       await pauseAllVideosExcept(index)
@@ -122,8 +179,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       video.muted = globalMuted
       video.volume = globalMuted ? 0 : 1
       
-      // Only play if video is paused
-      if (video.paused) {
+      // Only play if video is paused and ready
+      if (video.paused && video.readyState >= 2) {
         await video.play()
       }
     } catch (error) {
@@ -133,9 +190,11 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         console.warn(`An unknown autoplay error occurred for video ${index}.`)
       }
     } finally {
-      setIsVideoSwitching(false)
+      if (!isFastScrolling) {
+        setIsVideoSwitching(false)
+      }
     }
-  }, [globalMuted, allVideos, pauseAllVideosExcept, isVideoSwitching])
+  }, [globalMuted, allVideos, pauseAllVideosExcept, isVideoSwitching, isFastScrolling])
 
   // Toggle play/pause
   const togglePlayPause = useCallback(async (index: number) => {
@@ -196,7 +255,29 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     }
   }, [collectionId, currentPage, hasMoreVideos, isShuffled, fetcher, isLoadingMore])
 
-  // Intersection Observer for video switching
+  // Debounced video index setter for fast scrolling
+  const setVideoIndexDebounced = useCallback((newIndex: number) => {
+    if (isFastScrolling) {
+      setPendingVideoIndex(newIndex)
+      
+      // Clear existing debounce
+      if (videoSwitchDebounceRef.current) {
+        clearTimeout(videoSwitchDebounceRef.current)
+      }
+      
+      // Set new debounce
+      videoSwitchDebounceRef.current = setTimeout(() => {
+        if (pendingVideoIndex !== null) {
+          setCurrentVideoIndex(pendingVideoIndex)
+          setPendingVideoIndex(null)
+        }
+      }, 150) // 150ms debounce for fast scrolling
+    } else {
+      setCurrentVideoIndex(newIndex)
+    }
+  }, [isFastScrolling, pendingVideoIndex])
+
+  // Enhanced intersection observer for fast scrolling
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect()
     
@@ -210,31 +291,32 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         }
       }
 
-      // If a video is sufficiently visible, mark it as current
-      if (mostVisibleEntry && mostVisibleEntry.intersectionRatio > 0.6) {
+      // Lower threshold for fast scrolling, higher for normal scrolling
+      const requiredThreshold = isFastScrolling ? 0.3 : 0.6
+
+      if (mostVisibleEntry && mostVisibleEntry.intersectionRatio > requiredThreshold) {
         const index = parseInt((mostVisibleEntry.target as HTMLElement).dataset.index || '0')
         
         // Don't change video index during initial load
-        if (!isInitialLoad && !isVideoSwitching) {
-          setCurrentVideoIndex(currentIndex => {
-            // Only update state if the index has actually changed
-            if (index === currentIndex) {
-              return currentIndex
-            }
-
+        if (!isInitialLoad) {
+          const currentIndex = isFastScrolling ? (pendingVideoIndex ?? currentVideoIndex) : currentVideoIndex
+          
+          if (index !== currentIndex) {
             // If this is the first time the user is scrolling, hide the scroll hint
             if (!hasUserScrolled) {
               setHasUserScrolled(true)
               setShowScrollHint(false)
             }
             
-            return index
-          })
+            setVideoIndexDebounced(index)
+          }
         }
       }
     }, { 
-      root: containerRef.current, 
-      threshold: 0.6
+      root: containerRef.current,
+      // Multiple thresholds for better detection during fast scrolling
+      threshold: [0.1, 0.3, 0.5, 0.6, 0.8, 1.0],
+      rootMargin: '0px 0px -10% 0px' // Trigger slightly before fully visible
     })
 
     videoRefs.current.forEach(video => {
@@ -242,12 +324,14 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     })
 
     return () => observerRef.current?.disconnect()
-  }, [allVideos.length, hasUserScrolled, isInitialLoad, isVideoSwitching])
+  }, [allVideos.length, hasUserScrolled, isInitialLoad, isFastScrolling, currentVideoIndex, pendingVideoIndex, setVideoIndexDebounced])
 
-  // Autoplay current video with improved timing
+  // Autoplay current video with improved timing for fast scrolling
   useEffect(() => {
-    const video = videoRefs.current[currentVideoIndex]
-    if (!video || !video.paused || isVideoSwitching) {
+    const targetIndex = isFastScrolling ? (pendingVideoIndex ?? currentVideoIndex) : currentVideoIndex
+    const video = videoRefs.current[targetIndex]
+    
+    if (!video || !video.paused) {
       return
     }
 
@@ -258,13 +342,15 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
 
     // This function will be called to attempt playback
     const attemptPlay = () => {
-      playVideo(currentVideoIndex)
+      playVideo(targetIndex)
     }
 
-    // Add a small delay to ensure proper video switching
+    // Adjust delay based on scrolling speed
+    const delay = isFastScrolling ? 100 : 300
+
     playVideoTimeoutRef.current = setTimeout(() => {
       // Check if video is ready to play
-      if (video.readyState >= 3) {
+      if (video.readyState >= 2) { // HAVE_CURRENT_DATA or higher
         attemptPlay()
       } else {
         // Wait for video to be ready
@@ -279,21 +365,22 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
           video.removeEventListener('canplay', onCanPlay)
         }
       }
-    }, 300) // 300ms delay for mobile Safari
+    }, delay)
 
     return () => {
       if (playVideoTimeoutRef.current) {
         clearTimeout(playVideoTimeoutRef.current)
       }
     }
-  }, [currentVideoIndex, playVideo, isVideoSwitching])
+  }, [currentVideoIndex, pendingVideoIndex, playVideo, isFastScrolling])
 
   // Load more videos when needed
   useEffect(() => {
-    if (currentVideoIndex >= allVideos.length - 5 && hasMoreVideos && !isLoadingMore) {
+    const effectiveIndex = isFastScrolling ? (pendingVideoIndex ?? currentVideoIndex) : currentVideoIndex
+    if (effectiveIndex >= allVideos.length - 5 && hasMoreVideos && !isLoadingMore) {
       loadMoreVideos()
     }
-  }, [currentVideoIndex, allVideos.length, hasMoreVideos, isLoadingMore, loadMoreVideos])
+  }, [currentVideoIndex, pendingVideoIndex, allVideos.length, hasMoreVideos, isLoadingMore, loadMoreVideos, isFastScrolling])
 
   // Handle video download
   const handleVideoDownload = useCallback((video: FastVideo) => {
@@ -323,16 +410,21 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
           return null
         }
         
-        // Preload strategy
-        const isCurrent = index === currentVideoIndex
-        const isNext = index === currentVideoIndex + 1
-        const isPrev = index === currentVideoIndex - 1
+        // Enhanced preload strategy for fast scrolling
+        const effectiveCurrentIndex = isFastScrolling ? (pendingVideoIndex ?? currentVideoIndex) : currentVideoIndex
+        const isCurrent = index === effectiveCurrentIndex
+        const isNear = Math.abs(index - effectiveCurrentIndex) <= 1
+        const isExtended = Math.abs(index - effectiveCurrentIndex) <= 2
 
         let preload: 'auto' | 'metadata' | 'none' = 'none'
 
-        if (isCurrent || isNext || isPrev) {
+        if (isCurrent) {
           preload = 'auto'
-        } else {
+        } else if (isNear) {
+          preload = 'auto'
+        } else if (isExtended && isFastScrolling) {
+          preload = 'metadata'
+        } else if (isExtended) {
           preload = 'metadata'
         }
         
@@ -360,6 +452,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
                   videoRef={(el) => { 
                     if (el) {
                       el.dataset.pauseReason = 'auto'
+                      el.dataset.index = index.toString()
                     }
                     videoRefs.current[index] = el 
                   }}
