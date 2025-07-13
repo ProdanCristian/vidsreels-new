@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { FastVideo, VideoResponse, TikTokViewProps } from './types'
 import LoadingSpinner from './loading-spinner'
@@ -38,6 +38,17 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   // Video state management
   const [isFastScrolling, setIsFastScrolling] = useState(false)
   const [pendingVideoIndex, setPendingVideoIndex] = useState<number | null>(null)
+  
+  // Detect if device is mobile
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  }, [])
+  
+  // Adjust limits based on device
+  const pageLimit = isMobile ? 20 : 10
+  const loadMoreThreshold = isMobile ? 3 : 5
+  const preloadRange = isMobile ? 3 : 2
 
   const fetcher = useCallback(async (url: string): Promise<VideoResponse> => {
     const response = await fetch(url)
@@ -46,12 +57,10 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   }, [])
 
   const { data, isLoading } = useSWR<VideoResponse>(
-    collectionId ? `/api/videos/${collectionId}?page=1&limit=10&shuffle=${isShuffled}` : null,
+    collectionId ? `/api/videos/${collectionId}?page=1&limit=${pageLimit}&shuffle=${isShuffled}` : null,
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
-
-
 
   // Get the video that's currently most visible in viewport
   const getCurrentVideoInViewport = useCallback(() => {
@@ -262,7 +271,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     setIsLoadingMore(true)
     try {
       const nextPage = currentPage + 1
-      const url = `/api/videos/${collectionId}?page=${nextPage}&limit=10&shuffle=${isShuffled}`
+      const url = `/api/videos/${collectionId}?page=${nextPage}&limit=${pageLimit}&shuffle=${isShuffled}`
       const response = await fetcher(url)
 
       if (response.videos.length > 0) {
@@ -282,7 +291,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     } finally {
       setIsLoadingMore(false)
     }
-  }, [collectionId, currentPage, hasMoreVideos, isShuffled, fetcher, isLoadingMore])
+  }, [collectionId, currentPage, hasMoreVideos, isShuffled, fetcher, isLoadingMore, pageLimit])
 
   // Debounced video index setter for fast scrolling
   const setVideoIndexDebounced = useCallback((newIndex: number) => {
@@ -408,10 +417,10 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   // Load more videos when needed
   useEffect(() => {
     const effectiveIndex = isFastScrolling ? (pendingVideoIndex ?? currentVideoIndex) : currentVideoIndex
-    if (effectiveIndex >= allVideos.length - 5 && hasMoreVideos && !isLoadingMore) {
+    if (effectiveIndex >= allVideos.length - loadMoreThreshold && hasMoreVideos && !isLoadingMore) {
       loadMoreVideos()
     }
-  }, [currentVideoIndex, pendingVideoIndex, allVideos.length, hasMoreVideos, isLoadingMore, loadMoreVideos, isFastScrolling])
+  }, [currentVideoIndex, pendingVideoIndex, allVideos.length, hasMoreVideos, isLoadingMore, loadMoreVideos, isFastScrolling, loadMoreThreshold])
 
   // Handle video download
   const handleVideoDownload = useCallback((video: FastVideo) => {
@@ -445,7 +454,7 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         const effectiveCurrentIndex = isFastScrolling ? (pendingVideoIndex ?? currentVideoIndex) : currentVideoIndex
         const isCurrent = index === effectiveCurrentIndex
         const isNear = Math.abs(index - effectiveCurrentIndex) <= 1
-        const isExtended = Math.abs(index - effectiveCurrentIndex) <= 2
+        const isExtended = Math.abs(index - effectiveCurrentIndex) <= preloadRange
 
         let preload: 'auto' | 'metadata' | 'none' = 'none'
 
