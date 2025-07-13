@@ -8,6 +8,7 @@ interface VideoPlayerProps {
   isActive: boolean
   globalMuted: boolean
   preload: 'auto' | 'metadata' | 'none'
+  showPlayButton: boolean
   onTogglePlayPause: () => void
   onPlay: () => void
   onPause: () => void
@@ -21,6 +22,7 @@ export default function VideoPlayer({
   isActive,
   globalMuted,
   preload,
+  showPlayButton,
   onTogglePlayPause,
   onPlay,
   onPause,
@@ -30,7 +32,6 @@ export default function VideoPlayer({
   const internalVideoRef = useRef<HTMLVideoElement | null>(null)
   const timelineRef = useRef<HTMLDivElement | null>(null)
   const retryCountRef = useRef(0)
-  const [showPlayButton, setShowPlayButton] = useState(false)
   const [progress, setProgress] = useState(0)
   const [isSeeking, setIsSeeking] = useState(false)
 
@@ -47,19 +48,10 @@ export default function VideoPlayer({
 
     const handlePlay = () => {
       retryCountRef.current = 0 // Reset retries on successful play
-      setShowPlayButton(false)
       onPlay()
     }
 
     const handlePause = () => {
-      // Check the 'data-pause-reason' attribute to see if it was a manual pause
-      if (videoElement.dataset.pauseReason === 'manual') {
-        setShowPlayButton(true)
-      } else {
-        setShowPlayButton(false)
-      }
-      // Reset the reason
-      videoElement.dataset.pauseReason = 'auto'
       onPause()
     }
     
@@ -369,26 +361,20 @@ export default function VideoPlayer({
       )}
 
       {/* Video timeline */}
-      <div
+      <div 
+        className="absolute bottom-4 left-4 right-4 h-1 bg-white/20 rounded-full cursor-pointer"
         ref={timelineRef}
-        className="absolute bottom-2 left-4 right-4 h-1 bg-white/20 cursor-pointer group rounded-full backdrop-blur-sm"
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
       >
-        {/* Background track */}
-        <div className="absolute inset-0 bg-white/10 rounded-full"></div>
-        
-        {/* Progress bar */}
         <div 
-          className="h-full bg-white relative rounded-full transition-all duration-150 ease-out"
-          style={{ width: `${progress}%` }}
-        >
-          {/* Handle */}
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200 ease-out transform scale-75 group-hover:scale-100 border-2 border-white/20"></div>
-        </div>
-        
-        {/* Hover effect overlay */}
-        <div className="absolute inset-0 bg-white/5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+          className="h-full bg-white rounded-full" 
+          style={{ width: `${progress}%` }} 
+        />
+        <div 
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full"
+          style={{ left: `calc(${progress}% - 6px)` }}
+        />
       </div>
     </>
   )
