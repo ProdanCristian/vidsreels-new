@@ -234,14 +234,8 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     }
 
     const handleScroll = () => {
-      // Immediately pause the current video when scrolling starts
-      const videoToPause = videoRefs.current[currentVideoIndex]
-      if (videoToPause && !videoToPause.paused) {
-        videoToPause.pause()
-      }
-
       if (scrollEndTimeoutRef.current) clearTimeout(scrollEndTimeoutRef.current)
-      scrollEndTimeoutRef.current = setTimeout(handleScrollEnd, 100)
+      scrollEndTimeoutRef.current = setTimeout(handleScrollEnd, 150)
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
@@ -262,19 +256,16 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     // Proactive preloading for smoother playback
     const preloadNextVideos = (count: number) => {
       for (let i = 1; i <= count; i++) {
-        const nextVideoIndex = currentVideoIndex + i
-        if (nextVideoIndex < allVideos.length) {
-          const nextVideo = videoRefs.current[nextVideoIndex]
-          if (nextVideo && nextVideo.preload !== 'auto') {
-            nextVideo.preload = 'auto'
-            nextVideo.load()
-          }
+        const nextVideo = videoRefs.current[currentVideoIndex + i]
+        if (nextVideo && nextVideo.preload !== 'auto') {
+          nextVideo.preload = 'auto'
+          nextVideo.load()
         }
       }
     }
     preloadNextVideos(2) // Preload next 2 videos
 
-  }, [currentVideoIndex, playVideo, manuallyPausedVideos, allVideos.length])
+  }, [currentVideoIndex, playVideo, manuallyPausedVideos])
 
   // Intersection Observer for infinite scrolling
   useEffect(() => {
