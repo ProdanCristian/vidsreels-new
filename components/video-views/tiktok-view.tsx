@@ -1,37 +1,130 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import Image from 'next/image'
 import useSWR from 'swr'
 import { FastVideo, VideoResponse, TikTokViewProps } from './types'
 import LoadingSpinner from './loading-spinner'
 import VideoControls from './video-controls'
-import VideoPlayer from './video-player'
 import ScrollIndicator from './scroll-indicator'
+import { Play } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+// A self-contained component for each video item
+function VideoItem({ 
+  video, 
+  isCurrent,
+  isPlaying,
+  onTogglePlay,
+  onDownload,
+  onToggleMute,
+  failedThumbnails,
+  setFailedThumbnails,
+  globalMuted,
+  videoRef,
+  itemRef,
+}: {
+  video: FastVideo
+  isCurrent: boolean
+  isPlaying: boolean
+  onTogglePlay: () => void
+  onDownload: () => void
+  onToggleMute: () => void
+  failedThumbnails: Set<string>
+  setFailedThumbnails: React.Dispatch<React.SetStateAction<Set<string>>>
+  globalMuted: boolean
+  videoRef: (el: HTMLVideoElement | null) => void
+  itemRef: (el: HTMLDivElement | null) => void
+}) {
+  const hasThumbnailFailed = failedThumbnails.has(video.thumbnailUrl || video.directUrl)
+  const thumbnailUrl = hasThumbnailFailed ? '/video-placeholder.png' : video.thumbnailUrl || video.directUrl
+
+  return (
+    <div
+      ref={itemRef}
+      className="w-full h-full relative flex items-center justify-center"
+      style={{ scrollSnapAlign: 'center' }}
+    >
+      <div 
+        className="relative w-full h-full max-w-sm max-h-[680px] mx-auto bg-black rounded-lg overflow-hidden flex items-center justify-center p-4" 
+        style={{ aspectRatio: '9/16' }}
+      >
+        <div className="relative w-full h-full bg-black rounded-lg overflow-hidden group">
+          
+          <video
+            ref={videoRef}
+            src={video.directUrl}
+            className={cn(
+              'w-full h-full object-cover transition-opacity duration-300',
+              isPlaying ? 'opacity-100' : 'opacity-0'
+            )}
+            loop
+            playsInline
+            muted={globalMuted}
+            onClick={onTogglePlay}
+          />
+
+          <div 
+            className={cn(
+              "absolute inset-0 transition-opacity duration-300 w-full h-full",
+              isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            )}
+            onClick={onTogglePlay}
+          >
+            <Image
+              src={thumbnailUrl}
+              alt={video.name}
+              fill
+              sizes="(max-width: 480px) 100vw, 480px"
+              className="object-cover w-full h-full"
+              priority={isCurrent}
+              placeholder="blur"
+              blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
+              onError={() => {
+                if (hasThumbnailFailed) return
+                setFailedThumbnails(prev => new Set(prev).add(thumbnailUrl))
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+              <div className="bg-black/50 backdrop-blur-sm rounded-full p-4">
+                <Play className="w-12 h-12 text-white" fill="white" />
+              </div>
+            </div>
+          </div>
+          
+          <VideoControls
+            globalMuted={globalMuted}
+            onToggleMute={onToggleMute}
+            onDownload={onDownload}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 // Main TikTok View Component
 export default function TikTokView({ collectionId, onVideoDownload, isShuffled }: TikTokViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([])
+  const videoItemRefs = useRef<(HTMLDivElement | null)[]>([])
   const scrollEndTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
-  const loaderObserverRef = useRef<IntersectionObserver | null>(null)
   
-  // Core states
   const [allVideos, setAllVideos] = useState<FastVideo[]>([])
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
-  const [globalMuted, setGlobalMuted] = useState(true)
+  const [globalMuted, setGlobalMuted] = useState(false)
   
-  // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMoreVideos, setHasMoreVideos] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   
-  // Scroll hint state
   const [showScrollHint, setShowScrollHint] = useState(true)
   const [hasUserScrolled, setHasUserScrolled] = useState(false)
   
-  // Video state management
-  const [manuallyPausedVideos, setManuallyPausedVideos] = useState<Set<number>>(new Set())
+  const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set())
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null)
 
   const fetcher = useCallback(async (url: string): Promise<VideoResponse> => {
     const response = await fetch(url)
@@ -45,31 +138,46 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
 
-  // Initialize videos when data loads
+  const playVideo = useCallback((index: number) => {
+    if (playingIndex !== null && playingIndex !== index) {
+      videoRefs.current[playingIndex]?.pause()
+    }
+    const newVideo = videoRefs.current[index]
+    if (newVideo) {
+      newVideo.muted = globalMuted
+      newVideo.play().catch(err => console.error("Play failed", err))
+    }
+    setPlayingIndex(index)
+  }, [playingIndex, globalMuted])
+
+  const pauseVideo = useCallback((index: number) => {
+    videoRefs.current[index]?.pause()
+    if (playingIndex === index) {
+      setPlayingIndex(null)
+    }
+  }, [playingIndex])
+  
+  const handleTogglePlay = useCallback((index: number) => {
+    if (playingIndex === index) {
+      pauseVideo(index)
+    } else {
+      playVideo(index)
+    }
+  }, [playingIndex, playVideo, pauseVideo])
+  
   useEffect(() => {
     if (data?.videos) {
       setAllVideos(data.videos)
       setHasMoreVideos(data.hasMore)
       setCurrentPage(data.page)
+      setPlayingIndex(null)
+      setFailedThumbnails(new Set())
       videoRefs.current = new Array(data.videos.length).fill(null)
-      
-      // Ensure we start at the first video and scroll to top
-      setCurrentVideoIndex(0)
-      setManuallyPausedVideos(new Set())
-      
-      // Scroll to top after a brief delay to ensure DOM is ready
-      setTimeout(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = 0
-        }
-        // Allow intersection observer to work after initial setup
-        setTimeout(() => {
-        }, 500)
-      }, 100)
+      videoItemRefs.current = new Array(data.videos.length).fill(null)
+      if (containerRef.current) containerRef.current.scrollTop = 0
     }
   }, [data])
 
-  // Reset state when shuffle changes
   useEffect(() => {
     if (isShuffled) {
       setAllVideos([])
@@ -78,111 +186,31 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setHasMoreVideos(true)
       setShowScrollHint(true)
       setHasUserScrolled(false)
-      setManuallyPausedVideos(new Set())
+      setFailedThumbnails(new Set())
+      setPlayingIndex(null)
     }
   }, [isShuffled])
 
-  // Improved function to pause all videos except the current one
-  const pauseAllVideosExcept = useCallback(async (currentIndex: number) => {
-    const pausePromises = videoRefs.current.map(async (video, index) => {
-      if (video && index !== currentIndex && !video.paused) {
-        video.dataset.pauseReason = 'auto'
-        try {
-          video.pause()
-        } catch (error) {
-          console.warn(`Failed to pause video ${index}:`, error)
-        }
-      }
-    })
-    
-    await Promise.all(pausePromises)
-  }, [])
-
-  // Improved play video function
-  const playVideo = useCallback(async (index: number) => {
-    const video = videoRefs.current[index]
-    const videoData = allVideos[index]
-
-    // When a video is instructed to play, it should no longer be in the manually paused state.
-    setManuallyPausedVideos(prev => {
-      if (!prev.has(index)) return prev // Avoid unnecessary state update
-      const newSet = new Set(prev)
-      newSet.delete(index)
-      return newSet
-    })
-    
-    if (!video || !videoData?.directUrl) return
-    
-    try {
-      // Always pause other videos first
-      await pauseAllVideosExcept(index)
-      
-      // Configure video
-      video.muted = globalMuted
-      video.volume = globalMuted ? 0 : 1
-      
-      // Only play if video is paused and ready
-      if (video.paused && video.readyState >= 2) {
-        await video.play()
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        console.warn(`Autoplay for video ${index} was prevented. Error: ${error.name} - ${error.message}`)
-      } else {
-        console.warn(`An unknown autoplay error occurred for video ${index}.`)
-      }
-    }
-  }, [globalMuted, allVideos, pauseAllVideosExcept])
-
-  // Toggle play/pause
-  const togglePlayPause = useCallback(async (index: number) => {
-    const video = videoRefs.current[index]
-    if (!video) return
-
-    if (video.paused) {
-      // playVideo will handle removing it from the manuallyPausedVideos set.
-      await playVideo(index)
-    } else {
-      // User is manually pausing the video, so add it to the paused set
-      setManuallyPausedVideos(prev => new Set(prev).add(index))
-      video.pause()
-    }
-  }, [playVideo])
-
-  // Toggle global mute
   const toggleGlobalMute = useCallback(() => {
     setGlobalMuted(prev => {
       const newMuted = !prev
-      
-      // Apply to all videos immediately
-      videoRefs.current.forEach(video => {
-        if (video) {
-          video.muted = newMuted
-          video.volume = newMuted ? 0 : 1
-        }
-      })
-      
+      if (playingIndex !== null) {
+        const video = videoRefs.current[playingIndex]
+        if (video) video.muted = newMuted
+      }
       return newMuted
     })
-  }, [])
+  }, [playingIndex])
 
-  // Load more videos
   const loadMoreVideos = useCallback(async () => {
     if (isLoadingMore || !hasMoreVideos) return
-    
     setIsLoadingMore(true)
     try {
       const nextPage = currentPage + 1
       const url = `/api/videos/${collectionId}?page=${nextPage}&limit=10&shuffle=${isShuffled}`
       const response = await fetcher(url)
-
       if (response.videos.length > 0) {
-        setAllVideos(prev => {
-          const newVideos = [...prev, ...response.videos]
-          // Ensure videoRefs array is extended correctly
-          videoRefs.current = [...videoRefs.current, ...new Array(response.videos.length).fill(null)]
-          return newVideos
-        })
+        setAllVideos(prev => [...prev, ...response.videos])
         setCurrentPage(response.page)
         setHasMoreVideos(response.hasMore)
       } else {
@@ -195,79 +223,53 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     }
   }, [collectionId, currentPage, hasMoreVideos, isShuffled, fetcher, isLoadingMore])
 
-  // Authoritative "scroll end" handler to set the current video
-  const getMostVisibleVideoIndex = useCallback(() => {
-    const container = containerRef.current
-    if (!container || allVideos.length === 0) return null
-
-    const containerRect = container.getBoundingClientRect()
-    const containerCenter = containerRect.top + containerRect.height / 2
-
-    let closestIndex = -1
-    let closestDistance = Infinity
-
-    videoRefs.current.forEach((videoElement, index) => {
-      if (videoElement) {
-        const videoRect = videoElement.getBoundingClientRect()
-        const videoCenter = videoRect.top + videoRect.height / 2
-        const distance = Math.abs(videoCenter - containerCenter)
-
-        if (distance < closestDistance) {
-          closestDistance = distance
-          closestIndex = index
-        }
-      }
-    })
-    return closestIndex === -1 ? null : closestIndex
-  }, [allVideos.length])
-
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
-    const handleScrollEnd = () => {
-      const mostVisibleIndex = getMostVisibleVideoIndex()
-      if (mostVisibleIndex !== null && mostVisibleIndex !== currentVideoIndex) {
-        if (!hasUserScrolled) setHasUserScrolled(true)
-        setCurrentVideoIndex(mostVisibleIndex)
-      }
-    }
-
     const handleScroll = () => {
+      if (playingIndex !== null) {
+        const videoWrapper = videoItemRefs.current[playingIndex]
+        if (videoWrapper) {
+          const rect = videoWrapper.getBoundingClientRect()
+          const containerRect = container.getBoundingClientRect()
+          if (rect.bottom <= containerRect.top || rect.top >= containerRect.bottom) {
+            pauseVideo(playingIndex)
+          }
+        }
+      }
+
       if (scrollEndTimeoutRef.current) clearTimeout(scrollEndTimeoutRef.current)
-      scrollEndTimeoutRef.current = setTimeout(handleScrollEnd, 150)
+      
+      scrollEndTimeoutRef.current = setTimeout(() => {
+        const containerRect = container.getBoundingClientRect()
+        let closestIndex = -1
+        let closestDistance = Infinity
+        videoItemRefs.current.forEach((item, index) => {
+          if (item) {
+            const rect = item.getBoundingClientRect()
+            const center = rect.top + rect.height / 2
+            const distance = Math.abs(center - (containerRect.top + containerRect.height / 2))
+            if (distance < closestDistance) {
+              closestDistance = distance
+              closestIndex = index
+            }
+          }
+        })
+        if (closestIndex !== -1 && currentVideoIndex !== closestIndex) {
+          if (!hasUserScrolled) setHasUserScrolled(true)
+          setCurrentVideoIndex(closestIndex)
+        }
+      }, 150)
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
     return () => {
-      container.removeEventListener('scroll', handleScroll)
+      if (container) container.removeEventListener('scroll', handleScroll)
       if (scrollEndTimeoutRef.current) clearTimeout(scrollEndTimeoutRef.current)
     }
-  }, [getMostVisibleVideoIndex, currentVideoIndex, hasUserScrolled])
+  }, [currentVideoIndex, hasUserScrolled, playingIndex, pauseVideo])
   
-  // Autoplay current video and preload next ones
-  useEffect(() => {
-    // Autoplay logic
-    const video = videoRefs.current[currentVideoIndex]
-    if (video && video.paused && !manuallyPausedVideos.has(currentVideoIndex)) {
-      playVideo(currentVideoIndex)
-    }
-
-    // Proactive preloading for smoother playback
-    const preloadNextVideos = (count: number) => {
-      for (let i = 1; i <= count; i++) {
-        const nextVideo = videoRefs.current[currentVideoIndex + i]
-        if (nextVideo && nextVideo.preload !== 'auto') {
-          nextVideo.preload = 'auto'
-          nextVideo.load()
-        }
-      }
-    }
-    preloadNextVideos(2) // Preload next 2 videos
-
-  }, [currentVideoIndex, playVideo, manuallyPausedVideos])
-
-  // Intersection Observer for infinite scrolling
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -277,107 +279,43 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       },
       { root: containerRef.current, rootMargin: '200% 0px' }
     )
-
-    if (loadMoreTriggerRef.current) {
-      observer.observe(loadMoreTriggerRef.current)
-    }
-    loaderObserverRef.current = observer
-
-    return () => {
-      if (loaderObserverRef.current) {
-        loaderObserverRef.current.disconnect()
-      }
-    }
+    const trigger = loadMoreTriggerRef.current
+    if (trigger) observer.observe(trigger)
+    return () => { if (trigger) observer.unobserve(trigger) }
   }, [hasMoreVideos, isLoadingMore, loadMoreVideos])
-
-
-  // Handle video download
-  const handleVideoDownload = useCallback((video: FastVideo) => {
-    onVideoDownload(video.directUrl, `${video.name.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`)
-  }, [onVideoDownload])
-
-  // Handle video error
-  const handleVideoError = useCallback(() => {
-    // Intentionally left blank
-  }, [])
 
   return (
     <div 
       ref={containerRef}
       className="fixed top-16 sm:top-20 left-0 right-0 bottom-0 overflow-y-auto bg-black"
-      style={{ 
-        scrollbarWidth: 'none', 
-        msOverflowStyle: 'none',
-        scrollSnapType: 'y mandatory',
-        scrollSnapStop: 'always',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
-      }}
+      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', scrollSnapType: 'y mandatory' }}
     >
-      {allVideos.map((video, index) => {
-        if (!video.directUrl || !video.directUrl.startsWith('http')) {
-          return null
-        }
-        
-        const isCurrent = index === currentVideoIndex
-        const preload = isCurrent ? 'auto' : 'metadata'
-        
-        return (
-          <div
-            key={`${video.id}-${index}`}
-            className="w-full h-full relative flex items-center justify-center"
-            style={{ scrollSnapAlign: 'center' }}
-          >
-            <div 
-              className="relative w-full h-full max-w-sm max-h-[680px] mx-auto bg-black rounded-lg overflow-hidden flex items-center justify-center p-4" 
-              style={{ aspectRatio: '9/16' }}
-            >
-              <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
-                <VideoPlayer
-                  video={video}
-                  index={index}
-                  isActive={isCurrent}
-                  globalMuted={globalMuted}
-                  preload={preload}
-                  showPlayButton={manuallyPausedVideos.has(index)}
-                  onTogglePlayPause={() => togglePlayPause(index)}
-                  onPlay={() => {}}
-                  onPause={() => {}}
-                  onError={() => handleVideoError()}
-                  videoRef={(el) => { 
-                    if (el) {
-                      el.dataset.pauseReason = 'auto'
-                      el.dataset.index = index.toString()
-                    }
-                    videoRefs.current[index] = el 
-                  }}
-                />
-
-                <VideoControls
-                  globalMuted={globalMuted}
-                  onToggleMute={toggleGlobalMute}
-                  onDownload={() => handleVideoDownload(video)}
-                />
-              </div>
-            </div>
-          </div>
-        )
-      })}
+      {allVideos.map((video, index) => (
+        <VideoItem
+          key={`${video.id}-${index}`}
+          video={video}
+          isCurrent={index === currentVideoIndex}
+          isPlaying={playingIndex === index}
+          onTogglePlay={() => handleTogglePlay(index)}
+          onDownload={() => onVideoDownload(video.directUrl, `${video.name.replace(/[^a-zA-Z0-9]/g, '_')}.mp4`)}
+          onToggleMute={toggleGlobalMute}
+          failedThumbnails={failedThumbnails}
+          setFailedThumbnails={setFailedThumbnails}
+          globalMuted={globalMuted}
+          videoRef={(el) => { videoRefs.current[index] = el }}
+          itemRef={(el) => { videoItemRefs.current[index] = el }}
+        />
+      ))}
       
-      {/* Sentinel element for infinite scroll */}
       {hasMoreVideos && !isLoadingMore && (
-        <div ref={loadMoreTriggerRef} style={{ height: '200px', background: 'transparent' }} />
+        <div ref={loadMoreTriggerRef} style={{ height: '200px' }} />
       )}
-
 
       <ScrollIndicator 
         isVisible={showScrollHint && allVideos.length > 1}
-        onDismiss={() => {
-          setShowScrollHint(false)
-          setHasUserScrolled(true)
-        }}
+        onDismiss={() => setShowScrollHint(false)}
       />
 
-      {/* Loading spinner for initial load and when fetching more videos */}
       {(isLoading || isLoadingMore) && <LoadingSpinner isVisible={true} />}
     </div>
   )
