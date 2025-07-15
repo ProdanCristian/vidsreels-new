@@ -40,6 +40,9 @@ export default function DeleteTikTokView({ collectionId, isShuffled }: DeleteTik
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   
+  // Video state management
+  const [manuallyPausedVideos, setManuallyPausedVideos] = useState<Set<number>>(new Set())
+  
   // Persistent scroll position states
   const [shouldRestorePosition, setShouldRestorePosition] = useState(false)
   const [targetVideoId, setTargetVideoId] = useState<string | null>(null)
@@ -215,7 +218,7 @@ export default function DeleteTikTokView({ collectionId, isShuffled }: DeleteTik
         }, 500)
       }, 300)  // Increased delay to ensure DOM is ready
     }
-  }, [allVideos.length, isInitialLoad, shouldRestorePosition, targetVideoId, currentVideoIndex, hasRestoredOnce, isUserScrolling])
+  }, [allVideos, allVideos.length, isInitialLoad, shouldRestorePosition, targetVideoId, currentVideoIndex, hasRestoredOnce, isUserScrolling])
 
   // Detect user scrolling to prevent automatic restoration during scroll
   useEffect(() => {
@@ -615,6 +618,7 @@ export default function DeleteTikTokView({ collectionId, isShuffled }: DeleteTik
                   isActive={isCurrent}
                   globalMuted={globalMuted}
                   preload={preload}
+                  showPlayButton={manuallyPausedVideos.has(index)}
                   onTogglePlayPause={() => togglePlayPause(index)}
                   onPlay={() => {}}
                   onPause={() => {}}
