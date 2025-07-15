@@ -61,7 +61,7 @@ export default function VideoPlayer({
       }
     }
 
-    const handleError = (e: Event) => {
+    const handleError = () => {
       // Silently ignore errors for non-active videos.
       if (!isActive) {
         return
