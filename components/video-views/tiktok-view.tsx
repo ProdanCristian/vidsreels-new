@@ -111,10 +111,11 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   const videoItemRefs = useRef<(HTMLDivElement | null)[]>([])
   const scrollEndTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const loadMoreTriggerRef = useRef<HTMLDivElement | null>(null)
+  const playPromisesRef = useRef<Map<number, Promise<void>>>(new Map())
   
   const [allVideos, setAllVideos] = useState<FastVideo[]>([])
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
-  const [globalMuted, setGlobalMuted] = useState(false)
+  const [globalMuted, setGlobalMuted] = useState(true) // Start muted for autoplay compatibility
   
   const [currentPage, setCurrentPage] = useState(1)
   const [hasMoreVideos, setHasMoreVideos] = useState(true)
@@ -122,9 +123,11 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
   
   const [showScrollHint, setShowScrollHint] = useState(true)
   const [hasUserScrolled, setHasUserScrolled] = useState(false)
+  const [hasUserInteracted, setHasUserInteracted] = useState(false)
   
   const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set())
   const [playingIndex, setPlayingIndex] = useState<number | null>(null)
+  const [manuallyPausedIndex, setManuallyPausedIndex] = useState<number | null>(null)
 
   const fetcher = useCallback(async (url: string): Promise<VideoResponse> => {
     const response = await fetch(url)
@@ -138,30 +141,70 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
 
-  const playVideo = useCallback((index: number) => {
+  const playVideo = useCallback((index: number, isAutoplay = false) => {
     if (playingIndex !== null && playingIndex !== index) {
+      // Cancel previous play promise and pause
+      playPromisesRef.current.delete(playingIndex)
       videoRefs.current[playingIndex]?.pause()
     }
+    
     const newVideo = videoRefs.current[index]
     if (newVideo) {
-      newVideo.muted = globalMuted
-      newVideo.play().catch(err => console.error("Play failed", err))
+      // For autoplay, force muted. For manual play, respect global mute setting after user interaction
+      newVideo.muted = isAutoplay ? true : (hasUserInteracted ? globalMuted : true)
+      
+      // Store the play promise to handle interruptions properly
+      const playPromise = newVideo.play().catch(err => {
+        // Handle specific interruption error gracefully
+        if (err.name === 'AbortError' || err.message.includes('interrupted')) {
+          // Play was interrupted, this is expected during fast scrolling
+          return
+        }
+        // Silently handle autoplay failures for better UX
+        if (!isAutoplay) {
+          console.error("Play failed", err)
+        }
+      }).finally(() => {
+        // Clean up the promise reference when done
+        playPromisesRef.current.delete(index)
+      })
+      
+      playPromisesRef.current.set(index, playPromise)
     }
     setPlayingIndex(index)
-  }, [playingIndex, globalMuted])
+  }, [playingIndex, globalMuted, hasUserInteracted])
 
-  const pauseVideo = useCallback((index: number) => {
-    videoRefs.current[index]?.pause()
+  const pauseVideo = useCallback(async (index: number, isManualPause = false) => {
+    const video = videoRefs.current[index]
+    if (!video) return
+    
+    // Wait for any ongoing play promise to resolve before pausing
+    const existingPlayPromise = playPromisesRef.current.get(index)
+    if (existingPlayPromise) {
+      try {
+        await existingPlayPromise
+      } catch {
+        // Play promise failed, that's ok, we can still pause
+      }
+      playPromisesRef.current.delete(index)
+    }
+    
+    video.pause()
     if (playingIndex === index) {
       setPlayingIndex(null)
+    }
+    if (isManualPause) {
+      setManuallyPausedIndex(index)
     }
   }, [playingIndex])
   
   const handleTogglePlay = useCallback((index: number) => {
+    setHasUserInteracted(true)
     if (playingIndex === index) {
-      pauseVideo(index)
+      pauseVideo(index, true) // Manual pause
     } else {
-      playVideo(index)
+      setManuallyPausedIndex(null) // Clear manual pause when manually playing
+      playVideo(index, false) // Manual play, not autoplay
     }
   }, [playingIndex, playVideo, pauseVideo])
   
@@ -171,10 +214,16 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setHasMoreVideos(data.hasMore)
       setCurrentPage(data.page)
       setPlayingIndex(null)
+      setManuallyPausedIndex(null) // Clear manual pause on new data load
       setFailedThumbnails(new Set())
+      playPromisesRef.current.clear() // Clear any pending play promises
       videoRefs.current = new Array(data.videos.length).fill(null)
       videoItemRefs.current = new Array(data.videos.length).fill(null)
       if (containerRef.current) containerRef.current.scrollTop = 0
+      // Auto-play the first video when data loads
+      if (data.videos.length > 0) {
+        setCurrentVideoIndex(0)
+      }
     }
   }, [data])
 
@@ -188,10 +237,29 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
       setHasUserScrolled(false)
       setFailedThumbnails(new Set())
       setPlayingIndex(null)
+      setManuallyPausedIndex(null) // Clear manual pause on shuffle
+      playPromisesRef.current.clear() // Clear any pending play promises
     }
   }, [isShuffled])
 
+  // Auto-play video when currentVideoIndex changes
+  useEffect(() => {
+    if (currentVideoIndex >= 0 && allVideos.length > 0 && videoRefs.current[currentVideoIndex]) {
+      // Don't autoplay if user manually paused this specific video
+      if (manuallyPausedIndex === currentVideoIndex) {
+        return
+      }
+      
+      // Small delay to ensure video element is ready
+      const timer = setTimeout(() => {
+        playVideo(currentVideoIndex, true) // Autoplay with muted
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [currentVideoIndex, allVideos.length, playVideo, manuallyPausedIndex])
+
   const toggleGlobalMute = useCallback(() => {
+    setHasUserInteracted(true)
     setGlobalMuted(prev => {
       const newMuted = !prev
       if (playingIndex !== null) {
@@ -227,7 +295,26 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
     const container = containerRef.current
     if (!container) return
 
+    const findClosestVideo = () => {
+      const containerRect = container.getBoundingClientRect()
+      let closestIndex = -1
+      let closestDistance = Infinity
+      videoItemRefs.current.forEach((item, index) => {
+        if (item) {
+          const rect = item.getBoundingClientRect()
+          const center = rect.top + rect.height / 2
+          const distance = Math.abs(center - (containerRect.top + containerRect.height / 2))
+          if (distance < closestDistance) {
+            closestDistance = distance
+            closestIndex = index
+          }
+        }
+      })
+      return closestIndex
+    }
+
     const handleScroll = () => {
+      // Pause videos that are out of view
       if (playingIndex !== null) {
         const videoWrapper = videoItemRefs.current[playingIndex]
         if (videoWrapper) {
@@ -239,26 +326,31 @@ export default function TikTokView({ collectionId, onVideoDownload, isShuffled }
         }
       }
 
-      if (scrollEndTimeoutRef.current) clearTimeout(scrollEndTimeoutRef.current)
-      
-      scrollEndTimeoutRef.current = setTimeout(() => {
-        const containerRect = container.getBoundingClientRect()
-        let closestIndex = -1
-        let closestDistance = Infinity
-        videoItemRefs.current.forEach((item, index) => {
-          if (item) {
-            const rect = item.getBoundingClientRect()
-            const center = rect.top + rect.height / 2
-            const distance = Math.abs(center - (containerRect.top + containerRect.height / 2))
-            if (distance < closestDistance) {
-              closestDistance = distance
-              closestIndex = index
-            }
+      // Immediate check for video in center (for responsive autoplay during scroll)
+      const closestIndex = findClosestVideo()
+      if (closestIndex !== -1 && currentVideoIndex !== closestIndex) {
+        const videoWrapper = videoItemRefs.current[closestIndex]
+        if (videoWrapper) {
+          const rect = videoWrapper.getBoundingClientRect()
+          const containerRect = container.getBoundingClientRect()
+          const centerY = containerRect.top + containerRect.height / 2
+          // If video is more than 50% visible in center, switch to it
+          if (rect.top <= centerY && rect.bottom >= centerY) {
+            if (!hasUserScrolled) setHasUserScrolled(true)
+            setManuallyPausedIndex(null) // Clear manual pause when scrolling to new video
+            setCurrentVideoIndex(closestIndex)
           }
-        })
-        if (closestIndex !== -1 && currentVideoIndex !== closestIndex) {
+        }
+      }
+
+      // Debounced update for final position
+      if (scrollEndTimeoutRef.current) clearTimeout(scrollEndTimeoutRef.current)
+      scrollEndTimeoutRef.current = setTimeout(() => {
+        const finalClosestIndex = findClosestVideo()
+        if (finalClosestIndex !== -1 && currentVideoIndex !== finalClosestIndex) {
           if (!hasUserScrolled) setHasUserScrolled(true)
-          setCurrentVideoIndex(closestIndex)
+          setManuallyPausedIndex(null) // Clear manual pause when scrolling to new video
+          setCurrentVideoIndex(finalClosestIndex)
         }
       }, 150)
     }
