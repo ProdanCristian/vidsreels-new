@@ -46,7 +46,7 @@ export default function DashboardHeader() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Avatar className="h-8 w-8 border-1 border-white/20">
+                <Avatar className="h-10 w-10 border-1">
                   {session?.user?.image && (
                     <AvatarImage 
                       src={session.user.image} 
