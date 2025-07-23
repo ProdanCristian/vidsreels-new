@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import Logo from "@/components/logo"
 import { LogOut, User } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
@@ -18,19 +18,17 @@ export default function DashboardHeader() {
   const { data: session } = useSession()
   const router = useRouter()
 
+
+
   const handleSignOut = async () => {
     await signOut({
       callbackUrl: "/auth/login",
     })
   }
 
-
-
   const navigateToDashboard = () => {
     router.push("/dashboard")
   }
-
-
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
@@ -44,13 +42,17 @@ export default function DashboardHeader() {
             <Logo />
           </div>
 
-
-
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Avatar className="h-8 w-8">
+                <Avatar className="h-8 w-8 border-1 border-white/20">
+                  {session?.user?.image && (
+                    <AvatarImage 
+                      src={session.user.image} 
+                      alt={session.user.name || session.user.email || "User"}
+                    />
+                  )}
                   <AvatarFallback className="bg-white text-black">
                     {session?.user?.name
                       ? session.user.name.charAt(0).toUpperCase()

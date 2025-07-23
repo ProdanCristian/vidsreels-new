@@ -243,7 +243,7 @@ export default function VideoPlayer({
       videoElement.removeEventListener('canplaythrough', handleCanPlayThrough)
       videoElement.removeEventListener('suspend', handleSuspend)
     }
-  }, [onPlay, onPause, isSeeking, onError, isActive])
+  }, [onPlay, onPause, isSeeking, onError, isActive, video.directUrl, video.id, video.name])
 
   const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (!timelineRef.current || !internalVideoRef.current?.duration) return

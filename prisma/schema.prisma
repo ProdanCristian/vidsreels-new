@@ -44,6 +44,7 @@ model User {
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
+  scripts       Script[]  // Relation to saved scripts
 }
 
 model VerificationToken {
@@ -81,4 +82,25 @@ model LuxuryVideos {
   @@index([isAnalyzed])
   @@index([tags])
   @@index([categories])
+}
+
+model Script {
+  id          String   @id @default(cuid())
+  title       String   // User-given title for the script
+  content     String   // The actual script content
+  topic       String   // The luxury topic (motivational, success-mindset, etc.)
+  duration    Int      // Duration in seconds (15, 30, 60)
+  isGenerated Boolean  @default(false) // true for AI-generated, false for custom
+  
+  // User relationship
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([topic])
+  @@index([duration])
 }

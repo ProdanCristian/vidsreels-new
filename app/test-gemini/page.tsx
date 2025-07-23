@@ -54,10 +54,10 @@ export default function TestGeminiPage() {
 
       const data = await res.json();
       setMessages(prev => [...prev, { role: 'model', text: data.text }]);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setMessages(prev => [
         ...prev,
-        { role: 'error', text: `Error: ${err.message}` },
+        { role: 'error', text: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` },
       ]);
     } finally {
       setIsLoading(false);

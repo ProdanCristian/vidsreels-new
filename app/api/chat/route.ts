@@ -41,10 +41,10 @@ export async function POST(req: NextRequest) {
     const text = response.text();
 
     return NextResponse.json({ text });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error("Error in Gemini API route:", e);
     return NextResponse.json(
-      { error: `Error processing request: ${e.message}` },
+      { error: `Error processing request: ${e instanceof Error ? e.message : 'Unknown error'}` },
       { status: 500 }
     );
   }

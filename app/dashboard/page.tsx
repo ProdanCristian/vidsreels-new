@@ -11,6 +11,10 @@ export default function Dashboard() {
     router.push(`/collection/${collectionName}`)
   }
 
+  const luxury=()=>{
+    router.push("/luxury")
+  }
+
 
 
   return (
@@ -37,7 +41,7 @@ export default function Dashboard() {
           {/* Luxury Collection Card */}
           <div 
             className="relative cursor-pointer group"
-            onClick={() => handleViewCollection("luxury")}
+            onClick={() => luxury()}
             style={{ aspectRatio: '3 / 4' }}
           >
             {/* Main Card */}

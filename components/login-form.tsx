@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -171,11 +170,14 @@ export function LoginForm({
             </div>
           </form>
           <div className="bg-muted relative hidden md:block">
-            <Image
-              src="/placeholder.svg"
-              alt="Image"
-              fill
-              className="object-cover dark:brightness-[0.2] dark:grayscale"
+            <video
+              src="/Luxury_951.mp4"
+              autoPlay={true}
+              muted={true}
+              loop={true}
+              playsInline
+              className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.5] dark:grayscale"
+              suppressHydrationWarning
             />
           </div>
         </CardContent>
