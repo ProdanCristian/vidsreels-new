@@ -192,39 +192,61 @@ export async function GET(
 
     console.log(`🎬 API request: collection=${collectionId}, page=${page}, limit=${limit}, shuffle=${shuffle}`)
 
-    // Get videos using stored URLs
-    const result = await getVideosFromDatabase(page, limit, shuffle)
+    // Handle different collection types
+    if (collectionId === 'luxury') {
+      // Get videos using stored URLs for luxury collection
+      const result = await getVideosFromDatabase(page, limit, shuffle)
 
-    console.log(`✅ API response: ${result.videos.length} videos, hasMore=${result.hasMore}, total=${result.totalCount}`)
+      console.log(`✅ API response: ${result.videos.length} videos, hasMore=${result.hasMore}, total=${result.totalCount}`)
 
-    // Add performance headers
-    const response = NextResponse.json({
-      videos: result.videos,
-      hasMore: result.hasMore,
-      totalCount: result.totalCount,
-      page,
-      limit,
-      source: 'luxuryvideos-stored-urls',
-      performance: {
-        directR2: true,
-        storedUrls: true,
-        mp4Only: true,
-        ultraFast: true
-      }
-    })
+      // Add performance headers
+      const response = NextResponse.json({
+        videos: result.videos,
+        hasMore: result.hasMore,
+        totalCount: result.totalCount,
+        page,
+        limit,
+        source: 'luxuryvideos-stored-urls',
+        performance: {
+          directR2: true,
+          storedUrls: true,
+          mp4Only: true,
+          ultraFast: true
+        }
+      })
 
-    // Cache headers for better performance
-    response.headers.set('Cache-Control', `public, s-maxage=${CACHE_TTL}, stale-while-revalidate`)
-    response.headers.set('X-Performance-Mode', 'luxuryvideos-stored-urls')
-    response.headers.set('X-URL-Source', 'database-stored')
-    
-    return response
+      // Cache headers for better performance
+      response.headers.set('Cache-Control', `public, s-maxage=${CACHE_TTL}, stale-while-revalidate`)
+      response.headers.set('X-Performance-Mode', 'luxuryvideos-stored-urls')
+      response.headers.set('X-URL-Source', 'database-stored')
+      
+      return response
+
+    } else {
+      // For other collections (tech, fashion, travel, food, fitness), return empty results
+      console.log(`📭 Collection '${collectionId}' not available yet`)
+      
+      const response = NextResponse.json({
+        videos: [],
+        hasMore: false,
+        totalCount: 0,
+        page,
+        limit,
+        message: `${collectionId.charAt(0).toUpperCase() + collectionId.slice(1)} collection coming soon!`,
+        collectionId,
+        source: 'collection-not-available'
+      })
+
+      response.headers.set('Cache-Control', `public, s-maxage=60, stale-while-revalidate`)
+      
+      return response
+    }
 
   } catch (error) {
     console.error('❌ API Error:', error)
     return NextResponse.json(
       { 
-        error: 'Failed to fetch luxury videos',
+        error: 'Failed to fetch videos',
         message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }

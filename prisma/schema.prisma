@@ -59,6 +59,26 @@ model LuxuryVideos {
   s3Key        String @unique
   thumbnailUrl String
   videoUrl     String
+  videoLength  Int?       // Video length in seconds
+
+  // AI-powered content analysis
+  tags           String[]   // Keywords and tags (e.g., "yacht", "sunset", "travel")
+  categories     String[]   // Broader categories (e.g., "Luxury Travel", "Real Estate")
+  objects        String[]   // Specific objects detected (e.g., "Ferrari", "Rolex watch")
+  setting        String[]   // Scene setting (e.g., "beach", "cityscape", "mountains")
+  mood           String[]   // Vibe or mood (e.g., "inspirational", "relaxing", "energetic")
+  dominantColors String[]   // Dominant colors in hex format (e.g., "#FFD700")
+
+  // AI analysis metadata
+  isAnalyzed     Boolean  @default(false)
+  analyzedAt     DateTime?
+
+  // Metadata
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 
   @@index([s3Key])
+  @@index([isAnalyzed])
+  @@index([tags])
+  @@index([categories])
 }

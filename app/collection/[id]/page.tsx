@@ -1,16 +1,14 @@
 "use client"
 
 import { useParams } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import DashboardHeader from "@/components/dashboard-header"
-import TikTokView from "@/components/video-views/tiktok-view"
 import GridView from "@/components/video-views/grid-view"
-import { Button } from "@/components/ui/button"
-import { LayoutGrid, Layers, Shuffle } from "lucide-react"
-import useSWR from 'swr'
+import useSWR, { mutate } from 'swr'
 
 interface FastVideo {
   id: string
+  s3Key: string
   name: string
   size: string
   streamUrl: string
@@ -30,18 +28,17 @@ interface VideoResponse {
   page: number
   limit: number
   nextToken?: string
+  message?: string
 }
-
-// No transformation needed - API returns correct format for GridView
 
 export default function CollectionPage() {
   const params = useParams()
   const collectionId = params.id as string
-  const [currentView, setCurrentView] = useState<'tiktok' | 'grid'>('tiktok')
   const [currentPage, setCurrentPage] = useState(1)
-  const [isShuffled, setIsShuffled] = useState(false)
+  const [videos, setVideos] = useState<FastVideo[]>([])
 
-  // Fetcher function for SWR
+  const swrKey = collectionId ? `/api/videos/${collectionId}?page=${currentPage}&limit=12` : null
+
   const fetcher = async (url: string): Promise<VideoResponse> => {
     const response = await fetch(url)
     if (!response.ok) {
@@ -50,9 +47,8 @@ export default function CollectionPage() {
     return response.json()
   }
 
-  // Fetch data for grid view
   const { data: gridData, isLoading: gridLoading } = useSWR<VideoResponse>(
-    collectionId && currentView === 'grid' ? `/api/videos/${collectionId}?page=${currentPage}&limit=12&shuffle=${isShuffled}` : null,
+    swrKey,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -60,8 +56,14 @@ export default function CollectionPage() {
       revalidateIfStale: false,
     }
   )
+  
+  useEffect(() => {
+    if (gridData?.videos) {
+      setVideos(gridData.videos)
+    }
+  }, [gridData])
 
-  // Handle video download
+
   const handleVideoDownload = async (videoUrl: string, filename: string) => {
     try {
       const response = await fetch(videoUrl)
@@ -79,18 +81,34 @@ export default function CollectionPage() {
     }
   }
 
-  // Handle page change for grid view
+  const handleVideoDelete = async (videoId: string) => {
+    // Optimistically remove the video from the UI
+    setVideos(prev => prev.filter(v => v.id !== videoId));
+
+    try {
+      const response = await fetch(`/api/videos/${collectionId}?videoId=${videoId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete video. Restoring UI.');
+      }
+      
+      // Revalidate the SWR cache to get fresh data
+      mutate(swrKey);
+
+    } catch (error) {
+      console.error('Delete failed:', error);
+      // If the delete fails, re-fetch the data to restore the video list
+      mutate(swrKey);
+    }
+  };
+
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
   }
 
-  // Toggle shuffle and reset to page 1
-  const toggleShuffle = () => {
-    setIsShuffled(!isShuffled)
-    setCurrentPage(1)
-  }
-
-  // Don't render views until we have the collection ID
   if (!collectionId) {
     return (
       <div className="min-h-screen bg-black">
@@ -104,83 +122,49 @@ export default function CollectionPage() {
     )
   }
 
-  // Prepare collection data for grid view
-  const gridCollection = gridData ? {
-    id: collectionId,
-    name: 'Collection',
-    videos: gridData.videos, // Use videos directly - no transformation needed
-    totalVideos: gridData.totalCount,
-    hasMore: gridData.hasMore,
-    totalPages: Math.ceil(gridData.totalCount / 12),
-    currentPage: gridData.page
-  } : null
+  const totalPages = gridData ? Math.ceil(gridData.totalCount / 12) : 1
 
-  const totalPages = gridCollection?.totalPages || 1
+  // Check if this is an empty collection with a coming soon message
+  const isComingSoon = gridData && gridData.totalCount === 0 && gridData.message
 
   return (
     <div className="min-h-screen bg-black">
       <DashboardHeader />
       
-      {/* View Toggle */}
-      <div className="fixed top-24 sm:top-28 left-1/2 transform -translate-x-1/2 z-40">
-        <div className="flex bg-black/70 backdrop-blur-md rounded-full border border-white/10 p-0.5 shadow-lg">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView('tiktok')}
-            className={`cursor-pointer rounded-full w-8 h-8 p-0 transition-all duration-200 ${
-              currentView === 'tiktok' 
-                ? 'bg-white text-black shadow-sm' 
-                : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCurrentView('grid')}
-            className={`rounded-full w-8 h-8 p-0 transition-all duration-200 ${
-              currentView === 'grid' 
-                ? 'bg-white text-black shadow-sm' 
-                : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </Button>
-          {/* Divider */}
-          <div className="w-px h-5 my-auto bg-white/10 mx-1"></div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleShuffle}
-            className={`rounded-full w-8 h-8 p-0 transition-all duration-200 ${
-              isShuffled 
-                ? 'bg-blue-500 text-white shadow-sm' 
-                : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Shuffle className="w-4 h-4" />
-          </Button>
+      {isComingSoon ? (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-20 sm:pt-24">
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-white mb-4 capitalize">
+                {collectionId} Collection
+              </h2>
+              <p className="text-lg text-white/80 mb-2">
+                {gridData.message}
+              </p>
+                             <p className="text-sm text-white/60 max-w-md">
+                 We&apos;re working hard to bring you amazing {collectionId} videos. Check back soon for new content!
+               </p>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => window.history.back()}
+                className="px-6 py-3 bg-white/20 backdrop-blur-sm rounded-full font-medium text-white border border-white/30 hover:bg-white/30 hover:border-white/50 transition-all duration-200"
+              >
+                Go Back
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* Render appropriate view */}
-      {currentView === 'tiktok' ? (
-      <TikTokView
-        collectionId={collectionId}
-        onVideoDownload={handleVideoDownload}
-          isShuffled={isShuffled}
-        />
       ) : (
         <GridView
-          videos={gridCollection?.videos || []}
+          videos={videos}
           currentPage={currentPage}
           totalPages={totalPages}
           loadingMore={gridLoading}
           onPageChange={handlePageChange}
           onVideoDownload={handleVideoDownload}
-      />
+          onVideoDelete={handleVideoDelete}
+        />
       )}
     </div>
   )

@@ -3,13 +3,14 @@
 import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Download, Play, Volume2, VolumeX, Pause } from "lucide-react"
+import { Download, Play, Volume2, VolumeX, Pause, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 
 // Video interface matching the LuxuryVideos API response
 interface Video {
   id: string
+  s3Key: string
   name: string
   size: string
   streamUrl: string
@@ -29,9 +30,10 @@ interface GridViewProps {
   loadingMore: boolean
   onPageChange: (page: number) => void
   onVideoDownload: (videoUrl: string, filename: string) => void
+  onVideoDelete: (videoId: string, s3Key: string, thumbnailUrl: string) => void
 }
 
-const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, onVideoDownload }: GridViewProps) => {
+const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, onVideoDownload, onVideoDelete }: GridViewProps) => {
   const [isPlaying, setIsPlaying] = useState<boolean[]>(Array(videos.length).fill(false))
   const [isMuted, setIsMuted] = useState<boolean[]>(Array(videos.length).fill(false))
   const [failedThumbnails, setFailedThumbnails] = useState<Set<string>>(new Set())
@@ -227,6 +229,21 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
                   className="border-none bg-black/50 backdrop-blur-sm text-white hover:bg-black/70 rounded-full p-2 h-8 w-8"
                 >
                   <Download className="w-4 h-4" />
+                </Button>
+
+                {/* Delete button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Are you sure you want to delete "${video.name}"? This cannot be undone.`)) {
+                      onVideoDelete(video.id, video.s3Key, video.thumbnailUrl);
+                    }
+                  }}
+                  className="border-none bg-red-500/80 backdrop-blur-sm text-white hover:bg-red-600/90 rounded-full p-2 h-8 w-8"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             </div>
