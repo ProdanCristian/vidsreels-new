@@ -89,7 +89,7 @@ export default function LuxuryScriptGenerator() {
   const musicSectionRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll helper function
-  const scrollToSection = (ref: React.RefObject<HTMLDivElement>, delay = 500) => {
+  const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>, delay = 500) => {
     setTimeout(() => {
       ref.current?.scrollIntoView({ 
         behavior: 'smooth', 
@@ -148,7 +148,7 @@ export default function LuxuryScriptGenerator() {
     setIsSeeking(true)
   }
 
-  const handleSeekEnd = (e: React.MouseEvent<HTMLInputElement>) => {
+  const handleSeekEnd = (e: React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
     setIsSeeking(false)
     const seekTime = parseFloat(e.currentTarget.value)
         
