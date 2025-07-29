@@ -737,14 +737,14 @@ Return ONLY the optimized script, ready for voice generation.`
           </p>
         </div>
 
-        {/* Progress Indicator */}
-        <div className="mb-8">
+        {/* Progress Indicator - Sticky */}
+        <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-md border-b border-white/10 py-4 mb-8">
           <div className="flex items-center justify-center gap-4 mb-4">
             {/* Step 1: Person Selection */}
             <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 0 
-                  ? 'bg-green-500/20 border-green-500 text-green-300' 
+                  ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
                   : 'bg-white/10 border-white/20 text-white/60'
               }`}>
                 1
@@ -757,15 +757,15 @@ Return ONLY the optimized script, ready for voice generation.`
             </div>
 
             {/* Connection Line */}
-            <div className={`w-12 h-0.5 transition-all duration-500 ${
-              currentStep >= 1 ? 'bg-green-500' : 'bg-white/20'
+            <div className={`w-16 h-1 rounded-full transition-all duration-500 ${
+              currentStep >= 1 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-white/20'
             }`}></div>
 
             {/* Step 2: Script Generation */}
             <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 1 
-                  ? 'bg-green-500/20 border-green-500 text-green-300' 
+                  ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
                   : 'bg-white/10 border-white/20 text-white/60'
               }`}>
                 2
@@ -778,15 +778,15 @@ Return ONLY the optimized script, ready for voice generation.`
             </div>
 
             {/* Connection Line */}
-            <div className={`w-12 h-0.5 transition-all duration-500 ${
-              currentStep >= 2 ? 'bg-green-500' : 'bg-white/20'
+            <div className={`w-16 h-1 rounded-full transition-all duration-500 ${
+              currentStep >= 2 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-white/20'
             }`}></div>
 
             {/* Step 3: Voice Generation */}
             <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 2 
-                  ? 'bg-green-500/20 border-green-500 text-green-300' 
+                  ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
                   : 'bg-white/10 border-white/20 text-white/60'
               }`}>
                 3
@@ -799,15 +799,15 @@ Return ONLY the optimized script, ready for voice generation.`
             </div>
 
             {/* Connection Line */}
-            <div className={`w-12 h-0.5 transition-all duration-500 ${
-              currentStep >= 3 ? 'bg-green-500' : 'bg-white/20'
+            <div className={`w-16 h-1 rounded-full transition-all duration-500 ${
+              currentStep >= 3 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-white/20'
             }`}></div>
 
             {/* Step 4: Music Selection */}
             <div className="flex items-center gap-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 3 
-                  ? 'bg-green-500/20 border-green-500 text-green-300' 
+                  ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
                   : 'bg-white/10 border-white/20 text-white/60'
               }`}>
                 4
@@ -1758,6 +1758,7 @@ Return ONLY the optimized script, ready for voice generation.`
                           <div className="flex items-center">
                             <Button
                               size="sm"
+                              disabled={!isPlayerReady && !playerError}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 
@@ -1792,7 +1793,7 @@ Return ONLY the optimized script, ready for voice generation.`
                                   <span className="font-semibold">RETRY</span>
                                 </div>
                               ) : !isPlayerReady ? (
-                                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                <div className="flex items-center justify-center gap-1 sm:gap-2 opacity-70">
                                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                   <span className="font-semibold">LOADING</span>
                                 </div>
