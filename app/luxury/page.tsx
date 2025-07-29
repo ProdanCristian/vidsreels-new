@@ -77,7 +77,9 @@ export default function LuxuryScriptGenerator() {
   const [isPlayerReady, setIsPlayerReady] = useState(false)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [initTimeout, setInitTimeout] = useState<NodeJS.Timeout | null>(null)
-  // const [retryCount, setRetryCount] = useState(0) // Removed - not used in current implementation
+  // Progress tracking
+  const [currentStep, setCurrentStep] = useState(0) // 0: person, 1: script, 2: voice, 3: music
+  const [showScrollHint, setShowScrollHint] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement>(null)
   const youtubePlayerRef = useRef<YoutubePlayer | null>(null)
@@ -88,15 +90,12 @@ export default function LuxuryScriptGenerator() {
   const voiceSectionRef = useRef<HTMLDivElement>(null)
   const musicSectionRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll helper function
-  const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>, delay = 500) => {
-    setTimeout(() => {
-      ref.current?.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start',
-        inline: 'nearest'
-      })
-    }, delay)
+  // Progress tracking helper
+  const updateProgress = (step: number) => {
+    setCurrentStep(step)
+    // Show scroll hint for 3 seconds
+    setShowScrollHint(true)
+    setTimeout(() => setShowScrollHint(false), 3000)
   }
 
   // Update timeline progress
@@ -194,7 +193,7 @@ export default function LuxuryScriptGenerator() {
   }
 
   // Search for music
-  const searchMusic = async (query: string = 'motivational workout gym music') => {
+  const searchMusic = async (query: string = 'fearless motivation instrumentals') => {
     console.log('🎵 Starting music search for:', query)
     setIsLoadingMusic(true)
     try {
@@ -234,10 +233,60 @@ export default function LuxuryScriptGenerator() {
 
   // Load standard music recommendations on component mount
   const loadStandardMusic = async () => {
-    await searchMusic('motivational workout gym music')
+    await searchMusic('fearless motivation instrumentals')
   }
 
   // Retry playing current track
+  // Robust play function that handles player readiness
+  const handlePlayMusic = () => {
+    if (!selectedTrack || !playingVideoId) {
+      console.log('🎵 No track selected or no video ID')
+      return
+    }
+
+    console.log('🎵 Attempting to play music, player ready:', isPlayerReady, 'player ref:', !!youtubePlayerRef.current)
+
+    // If player is ready and exists, try to play
+    if (youtubePlayerRef.current && isPlayerReady) {
+      try {
+        youtubePlayerRef.current.playVideo()
+        console.log('🎵 Successfully called playVideo()')
+        return
+      } catch (error) {
+        console.log('🎵 Error calling playVideo():', error)
+      }
+    }
+
+    // If player isn't ready yet, wait a bit and retry
+    if (!isPlayerReady || !youtubePlayerRef.current) {
+      console.log('🎵 Player not ready, waiting and retrying...')
+      setPlayerError('Player loading, please wait...')
+      
+      // Retry after a short delay
+      setTimeout(() => {
+        if (youtubePlayerRef.current && isPlayerReady) {
+          try {
+            youtubePlayerRef.current.playVideo()
+            setPlayerError(null)
+            console.log('🎵 Successfully played after retry')
+          } catch (error) {
+            console.log('🎵 Retry failed:', error)
+            setPlayerError('Failed to play, please try again')
+          }
+        } else {
+          console.log('🎵 Player still not ready after retry')
+          setPlayerError('Player not ready, please try again')
+        }
+      }, 1000) // Wait 1 second and retry
+      
+      return
+    }
+
+    // If we get here, something went wrong
+    console.log('🎵 Unexpected state, retrying track')
+    retryPlayTrack()
+  }
+
   const retryPlayTrack = () => {
     if (selectedTrack) {
       console.log('🎵 Retrying track:', selectedTrack.title)
@@ -548,7 +597,7 @@ ${person.name.toUpperCase()} STYLE CHARACTERISTICS:`
       if (!script) throw new Error('No script generated')
       
       setGeneratedScript(script)
-      scrollToSection(voiceSectionRef, 800)
+      updateProgress(2) // Voice generation step
 
     } catch (error) {
       console.error('Error generating script:', error)
@@ -648,7 +697,7 @@ Return ONLY the optimized script, ready for voice generation.`
       
       // Load music after voice generation
       await loadStandardMusic()
-      scrollToSection(musicSectionRef, 1000)
+      updateProgress(3) // Music selection step
       
     } catch (error) {
       console.error('Error generating voice:', error)
@@ -686,6 +735,98 @@ Return ONLY the optimized script, ready for voice generation.`
           <p className="text-sm text-white/70 mb-1 max-w-2xl mx-auto">
             Select a famous person, get their motivational voice and script and generate reels instantly
           </p>
+        </div>
+
+        {/* Progress Indicator */}
+        <div className="mb-8">
+          <div className="flex items-center justify-center gap-4 mb-4">
+            {/* Step 1: Person Selection */}
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+                currentStep >= 0 
+                  ? 'bg-green-500/20 border-green-500 text-green-300' 
+                  : 'bg-white/10 border-white/20 text-white/60'
+              }`}>
+                1
+              </div>
+              <span className={`text-sm font-medium transition-all duration-300 ${
+                currentStep >= 0 ? 'text-white' : 'text-white/60'
+              }`}>
+                Person
+              </span>
+            </div>
+
+            {/* Connection Line */}
+            <div className={`w-12 h-0.5 transition-all duration-500 ${
+              currentStep >= 1 ? 'bg-green-500' : 'bg-white/20'
+            }`}></div>
+
+            {/* Step 2: Script Generation */}
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+                currentStep >= 1 
+                  ? 'bg-green-500/20 border-green-500 text-green-300' 
+                  : 'bg-white/10 border-white/20 text-white/60'
+              }`}>
+                2
+              </div>
+              <span className={`text-sm font-medium transition-all duration-300 ${
+                currentStep >= 1 ? 'text-white' : 'text-white/60'
+              }`}>
+                Script
+              </span>
+            </div>
+
+            {/* Connection Line */}
+            <div className={`w-12 h-0.5 transition-all duration-500 ${
+              currentStep >= 2 ? 'bg-green-500' : 'bg-white/20'
+            }`}></div>
+
+            {/* Step 3: Voice Generation */}
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+                currentStep >= 2 
+                  ? 'bg-green-500/20 border-green-500 text-green-300' 
+                  : 'bg-white/10 border-white/20 text-white/60'
+              }`}>
+                3
+              </div>
+              <span className={`text-sm font-medium transition-all duration-300 ${
+                currentStep >= 2 ? 'text-white' : 'text-white/60'
+              }`}>
+                Voice
+              </span>
+            </div>
+
+            {/* Connection Line */}
+            <div className={`w-12 h-0.5 transition-all duration-500 ${
+              currentStep >= 3 ? 'bg-green-500' : 'bg-white/20'
+            }`}></div>
+
+            {/* Step 4: Music Selection */}
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 ${
+                currentStep >= 3 
+                  ? 'bg-green-500/20 border-green-500 text-green-300' 
+                  : 'bg-white/10 border-white/20 text-white/60'
+              }`}>
+                4
+              </div>
+              <span className={`text-sm font-medium transition-all duration-300 ${
+                currentStep >= 3 ? 'text-white' : 'text-white/60'
+              }`}>
+                Music
+              </span>
+            </div>
+          </div>
+
+          {/* Scroll Hint */}
+          {showScrollHint && (
+            <div className="flex items-center justify-center gap-2 text-green-300 text-sm animate-pulse">
+              <div className="w-4 h-4 border-2 border-green-300 border-t-transparent rounded-full animate-spin"></div>
+              <span>Continue to next step below ↓</span>
+            </div>
+          )}
         </div>
 
         {/* Famous Person Selection - Trigger Button */}
@@ -747,7 +888,7 @@ Return ONLY the optimized script, ready for voice generation.`
                           onClick={() => {
                             setSelectedPerson(person)
                             setIsPersonModalOpen(false)
-                            scrollToSection(scriptSectionRef, 800)
+                            updateProgress(1) // Script generation step
                           }}
                           className={`relative p-3 sm:p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
                             selectedPerson?.id === person.id
@@ -825,7 +966,7 @@ Return ONLY the optimized script, ready for voice generation.`
                         onClick={() => {
                           setSelectedPerson(person)
                           setIsPersonModalOpen(false)
-                          scrollToSection(scriptSectionRef, 800)
+                          updateProgress(1) // Script generation step
                         }}
                         className="relative p-3 sm:p-4 rounded-xl border cursor-pointer transition-all duration-200 bg-black/30 border-white/10 hover:border-white/30 hover:bg-white/10 active:bg-white/15"
                       >
@@ -1019,7 +1160,7 @@ Return ONLY the optimized script, ready for voice generation.`
                         return
                       }
                       setGeneratedScript(customScript.trim())
-                      scrollToSection(voiceSectionRef, 500)
+                      updateProgress(2) // Voice generation step
                     }}
                     disabled={!selectedPerson || !customScript.trim()}
                     className="w-full bg-white/20 hover:bg-white/30 border border-white/30 hover:border-white/50 text-white font-medium py-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1427,20 +1568,11 @@ Return ONLY the optimized script, ready for voice generation.`
             {/* Music Categories */}
             <div className="mb-6">
               <h4 className="text-white/80 text-sm font-medium mb-4">Music Categories - Choose your vibe</h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {[
-                  { label: 'Epic Orchestral', query: 'epic orchestral cinematic instrumental' },
-                  { label: 'Motivational Gym', query: 'motivational workout gym music' },
-                  { label: 'Business Success', query: 'success mindset business music' },
-                  { label: 'Deep Focus', query: 'focus study concentration music' },
-                  { label: 'Dark Trap', query: 'dark trap beats instrumental' },
-                  { label: 'Cinematic Drama', query: 'cinematic dramatic trailer music' },
-                  { label: 'Hip Hop Beats', query: 'hip hop instrumental beats' },
-                  { label: 'Ambient Chill', query: 'ambient chill relaxing music' },
-                  { label: 'Electronic Epic', query: 'electronic epic dubstep music' },
-                  { label: 'Piano Emotional', query: 'emotional piano instrumental' },
-                  { label: 'Rock Energy', query: 'energetic rock instrumental' },
-                  { label: 'Synthwave', query: 'synthwave retro 80s instrumental' }
+                  { label: 'Fearless Motivation', query: 'fearless motivation instrumentals' },
+                  { label: 'Epic After AShamaluevMusic', query: 'AShamaluevMusic epic' },
+                  { label: 'Legendary Secession', query: 'secession studios' }
                 ].map((category) => (
                   <Button
                     key={category.label}
@@ -1464,7 +1596,7 @@ Return ONLY the optimized script, ready for voice generation.`
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      searchMusic(searchQuery || 'motivational workout gym music')
+                      searchMusic(searchQuery || 'fearless motivation instrumentals')
                     }
                   }}
                   placeholder="Search for background music..."
@@ -1472,7 +1604,7 @@ Return ONLY the optimized script, ready for voice generation.`
                 />
               </div>
               <Button
-                onClick={() => searchMusic(searchQuery || 'motivational workout gym music')}
+                onClick={() => searchMusic(searchQuery || 'fearless motivation instrumentals')}
                 disabled={isLoadingMusic}
                 className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 rounded-lg"
               >
@@ -1503,19 +1635,15 @@ Return ONLY the optimized script, ready for voice generation.`
                     console.log('🎵 YouTube player ready with Music Minimal config')
                     youtubePlayerRef.current = event.target
                     setIsPlayerReady(true)
+                    setPlayerError(null) // Clear any previous errors
                     
                     if (initTimeout) {
                       clearTimeout(initTimeout)
                       setInitTimeout(null)
                     }
                     
-                    // Always try to play when ready
-                    try {
-                      event.target.playVideo()
-                    } catch (error) {
-                      console.log('🎵 Could not auto-play, user interaction required:', error)
-                      setIsPlaying(false)
-                    }
+                    // Don't auto-play - wait for user to click PLAY button
+                    console.log('🎵 Player ready - waiting for user to click PLAY')
                   }}
                   onPlay={() => {
                     console.log('🎵 YouTube Music player started playing')
@@ -1562,24 +1690,6 @@ Return ONLY the optimized script, ready for voice generation.`
                   <h4 className="text-white/80 text-sm font-medium">Select Background Music</h4>
                   <span className="text-xs text-white/50">{musicTracks.length} tracks found</span>
                 </div>
-                
-                {/* Mobile Instructions and Safari Warning */}
-                {(/Mobile|Android|iPhone|iPad/.test(navigator.userAgent) || (playerError && /Safari/.test(navigator.userAgent) && /Mobile/.test(navigator.userAgent))) && (
-                  <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <div className="w-5 h-5 bg-amber-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
-                      </div>
-                      <div>
-                        <h5 className="text-amber-200 font-medium text-sm mb-1">Mobile Music Playback</h5>
-                        <p className="text-amber-200/80 text-xs leading-relaxed">
-                          📱 On mobile devices, you need to manually tap the <strong>Play</strong> button to start music due to browser autoplay restrictions. 
-                          {playerError && ' If music fails to load, try the Retry button or switch to Chrome/Firefox mobile.'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 <div className="space-y-2 sm:space-y-3 max-h-80 sm:max-h-96 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
                   {musicTracks.map((track) => (
@@ -1643,55 +1753,73 @@ Return ONLY the optimized script, ready for voice generation.`
                           </div>
                         </div>
                         
-                        {/* Action Button - Mobile Optimized */}
-                        <div className="flex items-center">
-                          <Button
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (selectedTrack?.id !== track.id) {
+                        {/* Action Button - Only show when track is selected */}
+                        {selectedTrack?.id === track.id ? (
+                          <div className="flex items-center">
+                            <Button
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                
+                                // If there's an error, retry
+                                if (playerError) {
+                                  retryPlayTrack()
+                                  return;
+                                }
+                                
+                                if (isPlaying) {
+                                  youtubePlayerRef.current?.pauseVideo()
+                                } else {
+                                  handlePlayMusic()
+                                }
+                              }}
+                              className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
+                                playingVideoId && isPlaying
+                                  ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
+                                  : !isPlaying
+                                  ? 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
+                                  : 'bg-white/10 hover:bg-white/20 border border-white/30 text-white/90 hover:text-white hover:border-white/50'
+                              }`}
+                            >
+                              {playingVideoId && isPlaying ? (
+                                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                  <Pause className="w-4 h-4" />
+                                  <span className="font-semibold">PAUSE</span>
+                                </div>
+                              ) : playerError ? (
+                                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                  <RefreshCw className="w-4 h-4" />
+                                  <span className="font-semibold">RETRY</span>
+                                </div>
+                              ) : !isPlayerReady ? (
+                                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                  <span className="font-semibold">LOADING</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                  <Play className="w-4 h-4" />
+                                  <span className="font-semibold">PLAY</span>
+                                </div>
+                              )}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <Button
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 playTrack(track)
-                                return;
-                              }
-                              
-                              // If there's an error, retry
-                              if (playerError) {
-                                retryPlayTrack()
-                                return;
-                              }
-                              
-                              if (isPlaying) {
-                                youtubePlayerRef.current?.pauseVideo()
-                              } else {
-                                youtubePlayerRef.current?.playVideo()
-                              }
-                            }}
-                            className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
-                              selectedTrack?.id === track.id && playingVideoId && isPlaying
-                                ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
-                                : selectedTrack?.id === track.id && !isPlaying
-                                ? 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
-                                : 'bg-white/10 hover:bg-white/20 border border-white/30 text-white/90 hover:text-white hover:border-white/50'
-                            }`}
-                          >
-                            {selectedTrack?.id === track.id && playingVideoId && isPlaying ? (
+                              }}
+                              className="text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] bg-white/10 hover:bg-white/20 border border-white/30 text-white/90 hover:text-white hover:border-white/50"
+                            >
                               <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                <Pause className="w-4 h-4" />
-                                <span className="font-semibold">PAUSE</span>
+                                <span className="font-semibold">SELECT</span>
                               </div>
-                            ) : selectedTrack?.id === track.id && playerError ? (
-                              <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                <RefreshCw className="w-4 h-4" />
-                                <span className="font-semibold">RETRY</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                <Play className="w-4 h-4" />
-                                <span className="font-semibold">PLAY</span>
-                              </div>
-                            )}
-                          </Button>
-                        </div>
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Timeline Progress Bar - Only show for currently playing track */}
@@ -1735,7 +1863,7 @@ Return ONLY the optimized script, ready for voice generation.`
                 </div>
                 <p className="text-white/50 mb-4">No music found. Try a different search term.</p>
                 <Button
-                  onClick={() => searchMusic('motivational workout gym music')}
+                  onClick={() => searchMusic('fearless motivation instrumentals')}
                   className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 py-2 rounded-lg"
                 >
                   Load Default Music
