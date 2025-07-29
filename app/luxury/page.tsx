@@ -4,9 +4,9 @@ import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog'
 import DashboardHeader from '@/components/dashboard-header'
-import { Crown, Sparkles, Volume2, Mic, Check, Music, Play, Pause, Search, Edit3, Save, X, RefreshCw } from 'lucide-react'
+import { Crown, Sparkles, Volume2, Mic, Check, Music, Play, Pause, Search, Edit3, Save, X } from 'lucide-react'
 import Image from 'next/image'
 import YouTube from 'react-youtube'
 
@@ -75,14 +75,16 @@ export default function LuxuryScriptGenerator() {
   const [trackDuration, setTrackDuration] = useState(0)
   const [isSeeking, setIsSeeking] = useState(false)
   const [isPlayerReady, setIsPlayerReady] = useState(false)
-  const [playerError, setPlayerError] = useState<string | null>(null)
-  const [initTimeout, setInitTimeout] = useState<NodeJS.Timeout | null>(null)
+  const [shouldAutoPlay, setShouldAutoPlay] = useState(false) // Track if we should auto-play when ready
+  
   // Progress tracking
   const [currentStep, setCurrentStep] = useState(0) // 0: person, 1: script, 2: voice, 3: music
   const [showScrollHint, setShowScrollHint] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement>(null)
-  const youtubePlayerRef = useRef<YoutubePlayer | null>(null)
+  
+  // YouTube player management - simplified approach
+  const [playerInstance, setPlayerInstance] = useState<YoutubePlayer | null>(null)
   
   // Section refs for auto-scroll
   const personSectionRef = useRef<HTMLDivElement>(null)
@@ -98,16 +100,39 @@ export default function LuxuryScriptGenerator() {
     setTimeout(() => setShowScrollHint(false), 3000)
   }
 
+  // Auto-play effect - backup mechanism for when onReady doesn't trigger auto-play
+  useEffect(() => {
+    if (isPlayerReady && shouldAutoPlay && playerInstance && !isPlaying) {
+      console.log('🎵 Backup auto-play triggered - player ready and auto-play requested')
+      
+      // Small delay to ensure everything is ready
+      setTimeout(() => {
+        try {
+          if (playerInstance && typeof playerInstance.playVideo === 'function') {
+            playerInstance.playVideo()
+            setIsPlaying(true)
+            setShouldAutoPlay(false) // Reset flag after successful play
+            console.log('🎵 Backup auto-play command sent')
+          } else {
+            console.log('🎵 Backup auto-play failed - player reference invalid')
+          }
+        } catch (error) {
+          console.log('🎵 Backup auto-play failed:', error)
+        }
+      }, 200)
+    }
+  }, [isPlayerReady, shouldAutoPlay, isPlaying, playerInstance])
+
   // Update timeline progress
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
-    
-    if (isPlaying && youtubePlayerRef.current && playingVideoId && !isSeeking && isPlayerReady) {
+
+    if (isPlaying && !isSeeking && playerInstance) {
       interval = setInterval(() => {
         try {
-          if (youtubePlayerRef.current && !isSeeking && typeof youtubePlayerRef.current.getCurrentTime === 'function') {
-            const current = youtubePlayerRef.current.getCurrentTime()
-            const total = youtubePlayerRef.current.getDuration()
+          if (playerInstance && !isSeeking && typeof playerInstance.getCurrentTime === 'function') {
+            const current = playerInstance.getCurrentTime()
+            const total = playerInstance.getDuration()
             
             if (current !== undefined && current !== null && !isNaN(current)) {
               setCurrentTime(current)
@@ -127,7 +152,9 @@ export default function LuxuryScriptGenerator() {
         clearInterval(interval)
       }
     }
-  }, [isPlaying, playingVideoId, isSeeking, isPlayerReady])
+  }, [isPlaying, playerInstance, isSeeking])
+
+  // Add guard clause for playerInstance in the effect
 
   // Format time for display
   const formatTime = (seconds: number): string => {
@@ -151,10 +178,10 @@ export default function LuxuryScriptGenerator() {
     setIsSeeking(false)
     const seekTime = parseFloat(e.currentTarget.value)
         
-    if (youtubePlayerRef.current && playingVideoId && isPlayerReady) {
+    if (playerInstance) {
       try {
-        if (typeof youtubePlayerRef.current.seekTo === 'function') {
-          youtubePlayerRef.current.seekTo(seekTime, true)
+        if (typeof playerInstance.seekTo === 'function') {
+          playerInstance.seekTo(seekTime, true)
         }
       } catch (error) {
         console.error('🎵 Error seeking:', error)
@@ -236,141 +263,96 @@ export default function LuxuryScriptGenerator() {
     await searchMusic('fearless motivation instrumentals')
   }
 
-  // Retry playing current track
-  // Robust play function that handles player readiness
+  // Enhanced onReady handler for YouTube events
+  const handlePlayerReady = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    console.log('🎵 YouTube player initialized successfully')
+    const player = event.target as YoutubePlayer
+    setPlayerInstance(player)
+    setIsPlayerReady(true)
+    
+    // Auto-play if requested
+    if (shouldAutoPlay && selectedTrack) {
+      setTimeout(() => {
+        try {
+          player.playVideo()
+          setIsPlaying(true)
+          setShouldAutoPlay(false) // Reset flag immediately
+          console.log('🎵 Auto-play successful')
+        } catch (error) {
+          console.log('🎵 Auto-play failed in ready handler:', error)
+        }
+      }, 300) // Slightly longer delay for more reliable auto-play
+    }
+  }
+
+  // Simplified play function
   const handlePlayMusic = () => {
     if (!selectedTrack || !playingVideoId) {
-      console.log('🎵 No track selected or no video ID')
+      console.log('🎵 No track selected')
       return
     }
 
-    console.log('🎵 Attempting to play music, player ready:', isPlayerReady, 'player ref:', !!youtubePlayerRef.current)
-
-    // If player is ready and exists, try to play
-    if (youtubePlayerRef.current && isPlayerReady) {
-      try {
-        youtubePlayerRef.current.playVideo()
-        console.log('🎵 Successfully called playVideo()')
-        return
-      } catch (error) {
-        console.log('🎵 Error calling playVideo():', error)
-      }
-    }
-
-    // If player isn't ready yet, wait a bit and retry
-    if (!isPlayerReady || !youtubePlayerRef.current) {
-      console.log('🎵 Player not ready, waiting and retrying...')
-      setPlayerError('Player loading, please wait...')
-      
-      // Retry after a short delay
-      setTimeout(() => {
-        if (youtubePlayerRef.current && isPlayerReady) {
-          try {
-            youtubePlayerRef.current.playVideo()
-            setPlayerError(null)
-            console.log('🎵 Successfully played after retry')
-          } catch (error) {
-            console.log('🎵 Retry failed:', error)
-            setPlayerError('Failed to play, please try again')
-          }
-        } else {
-          console.log('🎵 Player still not ready after retry')
-          setPlayerError('Player not ready, please try again')
-        }
-      }, 1000) // Wait 1 second and retry
-      
-      return
-    }
-
-    // If we get here, something went wrong
-    console.log('🎵 Unexpected state, retrying track')
-    retryPlayTrack()
-  }
-
-  const retryPlayTrack = () => {
-    if (selectedTrack) {
-      console.log('🎵 Retrying track:', selectedTrack.title)
-      
-      if (youtubePlayerRef.current) {
-        try {
-          youtubePlayerRef.current.playVideo()
-          setPlayerError(null)
-          return
-        } catch (e) {
-          console.log('🎵 Existing player retry failed:', e)
-        }
-      }
-      
-      playTrack(selectedTrack)
-    }
-  }
-
-  // Play a specific track
-  const playTrack = (track: MusicTrack) => {
-    if (!track || !track.url) {
-      console.log('🎵 Invalid track provided:', track)
-      return
-    }
-
-    const videoId = extractVideoId(track.url)
-    console.log('🎵 playTrack called:', track.title, 'VideoID:', videoId, 'URL:', track.url)
+    console.log('🎵 Attempting to play:', selectedTrack.title)
     
-    if (!videoId) {
-      console.log(`🎵 Unable to play "${track.title}" - invalid video URL`)
-      return
-    }
-
-    // Additional validation for YouTube video ID format
-    if (!/^[a-zA-Z0-9_-]{10,12}$/.test(videoId)) {
-      console.log('🎵 Invalid video ID format:', videoId)
-      return
-    }
-
-    if (playingVideoId === videoId) {
-      if (youtubePlayerRef.current) {
+    // Always reset auto-play flag when user manually clicks play
+    setShouldAutoPlay(false)
+    
+    if (playerInstance && isPlayerReady) {
+      try {
         if (isPlaying) {
-          youtubePlayerRef.current.pauseVideo();
+          playerInstance.pauseVideo()
+          setIsPlaying(false)
+          console.log('🎵 Paused music')
         } else {
-          youtubePlayerRef.current.playVideo();
+          playerInstance.playVideo()
+          setIsPlaying(true)
+          console.log('🎵 Started playing music')
         }
+      } catch (error) {
+        console.log('🎵 Player method failed:', error)
+        // Set auto-play flag only if player failed
+        setShouldAutoPlay(true)
       }
-      return;
+    } else {
+      console.log('🎵 Player not ready, will attempt when ready')
+      setShouldAutoPlay(true)
     }
+  }
 
-    // Stop current player if it exists
-    if (youtubePlayerRef.current) {
-      try {
-        youtubePlayerRef.current.stopVideo()
-      } catch (e) {
-        console.log('🎵 Could not stop current video:', e)
-      }
-    }
-
-    // Force new player creation with incremented key
-    setPlayerKey(prev => prev + 1)
+  // Simplified track selection
+  const playTrack = (track: MusicTrack) => {
+    console.log('🎵 Selecting new track:', track.title)
     
-    // Reset timeline state and errors
+    const videoId = extractVideoId(track.url)
+    if (!videoId) {
+      console.log('🎵 Invalid video URL')
+      return
+    }
+
+    // If same track is already selected, just toggle play/pause
+    if (selectedTrack?.id === track.id) {
+      handlePlayMusic()
+      return
+    }
+
+    setSelectedTrack(track)
+    setIsPlaying(false)
+    setShouldAutoPlay(true)
+    
+    // Reset timeline for new track
     setCurrentTime(0)
     setTrackDuration(0)
-    setPlayerError(null)
+    setIsSeeking(false)
     setIsPlayerReady(false)
-    // setRetryCount(0) // Reset retry count for new track - variable removed
-    youtubePlayerRef.current = null
     
-    setSelectedTrack(track)
-    setPlayingVideoId(videoId)
-    setIsPlaying(false) // Don't assume playing until user interaction on mobile
-    
-    // Set a timeout to detect if player fails to initialize
-    const timeout = setTimeout(() => {
-      if (!isPlayerReady) {
-        console.log('🎵 Player initialization timeout - player failed to load')
-        setPlayerError('Player failed to initialize')
-        setIsPlaying(false)
-      }
-    }, 5000) // 5 seconds should be enough for most tracks to load
-    
-    setInitTimeout(timeout)
+    // Only recreate player if video ID is different or no player exists
+    if (playingVideoId !== videoId || !playerInstance) {
+      setPlayingVideoId(videoId)
+      setPlayerKey(prev => prev + 1)
+      console.log('🎵 Creating new player for different video:', track.title)
+    } else {
+      console.log('🎵 Using existing player for track:', track.title)
+    }
   }
 
   // Famous people data
@@ -738,7 +720,7 @@ Return ONLY the optimized script, ready for voice generation.`
         </div>
 
         {/* Progress Indicator - Sticky */}
-        <div className="sticky top-19 z-40 bg-background/10 backdrop-blur-md border-b border-white/10 py-3 sm:py-4 mb-6 sm:mb-8">
+        <div className="sticky md:top-20 top-16 z-40 bg-background/10 backdrop-blur-md border-b border-white/10 py-3 sm:py-4 mb-6 sm:mb-8">
           <div className="flex items-center justify-center gap-1 sm:gap-2 md:gap-4 mb-3 sm:mb-4 px-2 sm:px-4">
             {/* Step 1: Person Selection */}
             <div className="flex items-center gap-1 sm:gap-2">
@@ -880,6 +862,9 @@ Return ONLY the optimized script, ready for voice generation.`
                         <Crown className="w-6 h-6" />
                         Choose Your Famous Person
                       </DialogTitle>
+                      <DialogDescription className="text-white/70">
+                        Select a famous person to generate a personalized script in their style and voice
+                      </DialogDescription>
                     </DialogHeader>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
                       {famousPeople.map((person) => (
@@ -958,6 +943,9 @@ Return ONLY the optimized script, ready for voice generation.`
                       <Crown className="w-6 h-6" />
                       Choose Your Famous Person
                     </DialogTitle>
+                    <DialogDescription className="text-white/70">
+                      Select a famous person to generate a personalized script in their style and voice
+                    </DialogDescription>
                   </DialogHeader>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
                     {famousPeople.map((person) => (
@@ -1616,7 +1604,7 @@ Return ONLY the optimized script, ready for voice generation.`
               </Button>
             </div>
 
-            {/* Hidden YouTube Player for background music - Music Minimal Config */}
+            {/* Hidden YouTube Player for background music - Optimized for Mobile */}
             {playingVideoId && (
               <div className="hidden">
                 <YouTube
@@ -1626,28 +1614,23 @@ Return ONLY the optimized script, ready for voice generation.`
                     width: '1',
                     height: '1',
                     playerVars: {
-                      // Music Minimal configuration - works for YouTube Music content
-                      autoplay: 0, // Disabled for mobile compatibility
+                      // Optimized for mobile and faster loading
+                      autoplay: 0, // Required for mobile
                       enablejsapi: 1,
+                      controls: 0, // Hide controls for faster loading
+                      disablekb: 1, // Disable keyboard for faster loading
+                      iv_load_policy: 3, // Disable annotations
+                      modestbranding: 1, // Remove YouTube branding
+                      rel: 0, // Don't show related videos
+                      fs: 0, // Disable fullscreen
+                      playsinline: 1, // Play inline on mobile
                     },
                   }}
-                  onReady={(event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-                    console.log('🎵 YouTube player ready with Music Minimal config')
-                    youtubePlayerRef.current = event.target
-                    setIsPlayerReady(true)
-                    setPlayerError(null) // Clear any previous errors
-                    
-                    if (initTimeout) {
-                      clearTimeout(initTimeout)
-                      setInitTimeout(null)
-                    }
-                    
-                    // Don't auto-play - wait for user to click PLAY button
-                    console.log('🎵 Player ready - waiting for user to click PLAY')
-                  }}
+                  onReady={handlePlayerReady}
                   onPlay={() => {
                     console.log('🎵 YouTube Music player started playing')
                     setIsPlaying(true)
+                    setShouldAutoPlay(false) // Reset auto-play flag when playing starts
                   }}
                   onPause={() => {
                     console.log('🎵 YouTube Music player paused')
@@ -1656,6 +1639,7 @@ Return ONLY the optimized script, ready for voice generation.`
                   onEnd={() => {
                     console.log('🎵 YouTube Music player ended')
                     setIsPlaying(false)
+                    setShouldAutoPlay(false) // Reset auto-play flag
                   }}
                   onError={(error) => {
                     const playerError = error as YouTubePlayerError;
@@ -1668,9 +1652,9 @@ Return ONLY the optimized script, ready for voice generation.`
                       console.log('🎵 Failed to load music track')
                     }
                     
-                    setPlayerError(`Error: ${errorCode}`)
                     setIsPlaying(false)
                     setIsPlayerReady(false)
+                    setShouldAutoPlay(false) // Cancel auto-play on error
                   }}
                 />
               </div>
@@ -1695,14 +1679,17 @@ Return ONLY the optimized script, ready for voice generation.`
                   {musicTracks.map((track) => (
                     <div
                       key={track.id}
-                      onClick={() => {
+                      onClick={(e) => {
+                        // Don't trigger if clicking on the play button
+                        if ((e.target as HTMLElement).closest('button')) {
+                          return
+                        }
+                        
+                        // If track is already selected, toggle play/pause directly
                         if (selectedTrack?.id === track.id) {
-                          if (isPlaying) {
-                            youtubePlayerRef.current?.pauseVideo()
-                          } else {
-                            youtubePlayerRef.current?.playVideo()
-                          }
+                          handlePlayMusic() // Use consistent play/pause logic
                         } else {
+                          // Select new track (will auto-play when ready)
                           playTrack(track)
                         }
                       }}
@@ -1746,8 +1733,10 @@ Return ONLY the optimized script, ready for voice generation.`
                             </p>
                             {selectedTrack?.id === track.id && (
                               <div className="flex items-center gap-1">
-                                <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
-                                <span className="text-green-400 text-xs font-medium">Selected</span>
+                                <Check className="w-3 h-3 text-green-400" />
+                                <span className="text-green-400 text-xs font-medium">
+                                  Selected
+                                </span>
                               </div>
                             )}
                           </div>
@@ -1758,28 +1747,16 @@ Return ONLY the optimized script, ready for voice generation.`
                           <div className="flex items-center">
                             <Button
                               size="sm"
-                              disabled={!isPlayerReady && !playerError}
                               onClick={(e) => {
                                 e.stopPropagation()
                                 
-                                // If there's an error, retry
-                                if (playerError) {
-                                  retryPlayTrack()
-                                  return;
-                                }
-                                
-                                if (isPlaying) {
-                                  youtubePlayerRef.current?.pauseVideo()
-                                } else {
-                                  handlePlayMusic()
-                                }
+                                // Use consistent play/pause logic
+                                handlePlayMusic()
                               }}
                               className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
                                 playingVideoId && isPlaying
                                   ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
-                                  : !isPlaying
-                                  ? 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
-                                  : 'bg-white/10 hover:bg-white/20 border border-white/30 text-white/90 hover:text-white hover:border-white/50'
+                                  : 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
                               }`}
                             >
                               {playingVideoId && isPlaying ? (
@@ -1787,19 +1764,17 @@ Return ONLY the optimized script, ready for voice generation.`
                                   <Pause className="w-4 h-4" />
                                   <span className="font-semibold">PAUSE</span>
                                 </div>
-                              ) : playerError ? (
-                                <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                  <RefreshCw className="w-4 h-4" />
-                                  <span className="font-semibold">RETRY</span>
-                                </div>
-                              ) : !isPlayerReady ? (
-                                <div className="flex items-center justify-center gap-1 sm:gap-2 opacity-70">
-                                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                  <span className="font-semibold">LOADING</span>
-                                </div>
                               ) : (
-                                <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                  <Play className="w-4 h-4" />
+                                <div className={`flex items-center justify-center gap-1 sm:gap-2 transition-all duration-300 ${
+                                  shouldAutoPlay && playingVideoId === extractVideoId(track.url) 
+                                    ? 'animate-pulse' 
+                                    : ''
+                                }`}>
+                                  <Play className={`w-4 h-4 transition-transform duration-300 ${
+                                    shouldAutoPlay && playingVideoId === extractVideoId(track.url)
+                                      ? 'animate-pulse scale-110'
+                                      : ''
+                                  }`} />
                                   <span className="font-semibold">PLAY</span>
                                 </div>
                               )}
@@ -1877,4 +1852,4 @@ Return ONLY the optimized script, ready for voice generation.`
       </main>
     </div>
   )
-} 
+}
