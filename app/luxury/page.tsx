@@ -701,27 +701,14 @@ Return ONLY the optimized script, ready for voice generation.`
     return gradients[category as keyof typeof gradients] || 'from-gray-500 to-gray-600'
   }
 
-  return (
+    return (
     <div className="min-h-screen bg-background">
       <DashboardHeader />
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-20 sm:pt-24">
-        
-        {/* Header Section */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <Crown className="w-8 h-8 md:w-12 md:h-12 text-white mr-3" />
-            <h1 className="text-2xl md:text-3xl font-bold text-white">
-              AI Luxury Reels Generation
-            </h1>
-          </div>
-          <p className="text-sm text-white/70 mb-1 max-w-2xl mx-auto">
-            Select a famous person, get their motivational voice and script and generate reels instantly
-          </p>
-        </div>
-
-                {/* Progress Indicator - Sticky positioned right under dashboard header */}
-        <div className="sticky top-16 sm:top-20 z-40 bg-background/80 backdrop-blur-md border-b border-white/10 py-3 sm:py-4 mb-6 sm:mb-8">
-          <div className="flex items-center justify-center gap-1 sm:gap-2 md:gap-4 mb-3 sm:mb-4 px-2 sm:px-4">
+      
+             {/* Progress Indicator - Sticky positioned right under dashboard header */}
+       <div className="sticky top-[64px] sm:top-[80px] z-40 bg-background/80 backdrop-blur-md border-b border-white/10 py-3 sm:py-4">
+         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+           <div className="flex items-center justify-center gap-1 sm:gap-2 md:gap-4 mb-3 sm:mb-4 px-2 sm:px-4">
             {/* Step 1: Person Selection */}
             <div className="flex items-center gap-1 sm:gap-2">
               <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
@@ -809,7 +796,23 @@ Return ONLY the optimized script, ready for voice generation.`
               <span>Continue to next step below ↓</span>
             </div>
           )}
-                 </div>
+        </div>
+      </div>
+      
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-6 sm:pt-8">
+        
+        {/* Header Section */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center mb-4">
+            <Crown className="w-8 h-8 md:w-12 md:h-12 text-white mr-3" />
+            <h1 className="text-2xl md:text-3xl font-bold text-white">
+              AI Luxury Reels Generation
+            </h1>
+          </div>
+          <p className="text-sm text-white/70 mb-1 max-w-2xl mx-auto">
+            Choose any famous voice → AI generates the script → Create viral reels in seconds
+          </p>
+        </div>
 
         {/* Famous Person Selection - Trigger Button */}
         <div ref={personSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-6 sm:mb-8 rounded-2xl overflow-hidden">
