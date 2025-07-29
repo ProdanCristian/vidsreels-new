@@ -719,8 +719,8 @@ Return ONLY the optimized script, ready for voice generation.`
           </p>
         </div>
 
-        {/* Progress Indicator - Sticky */}
-        <div className="sticky md:top-20 top-16 z-40 bg-background/10 backdrop-blur-md border-b border-white/10 py-3 sm:py-4 mb-6 sm:mb-8">
+                {/* Progress Indicator - Sticky positioned right under dashboard header */}
+        <div className="sticky top-16 sm:top-20 z-40 bg-background/80 backdrop-blur-md border-b border-white/10 py-3 sm:py-4 mb-6 sm:mb-8">
           <div className="flex items-center justify-center gap-1 sm:gap-2 md:gap-4 mb-3 sm:mb-4 px-2 sm:px-4">
             {/* Step 1: Person Selection */}
             <div className="flex items-center gap-1 sm:gap-2">
@@ -809,7 +809,7 @@ Return ONLY the optimized script, ready for voice generation.`
               <span>Continue to next step below ↓</span>
             </div>
           )}
-        </div>
+                 </div>
 
         {/* Famous Person Selection - Trigger Button */}
         <div ref={personSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-6 sm:mb-8 rounded-2xl overflow-hidden">
