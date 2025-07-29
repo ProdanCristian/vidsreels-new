@@ -1580,7 +1580,7 @@ Return ONLY the optimized script, ready for voice generation.`
                   </div>
                 )}
 
-                <div className="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-2 sm:space-y-3 max-h-80 sm:max-h-96 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
                   {musicTracks.map((track) => (
                     <div
                       key={track.id}
@@ -1595,17 +1595,17 @@ Return ONLY the optimized script, ready for voice generation.`
                           playTrack(track)
                         }
                       }}
-                      className={`p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
+                      className={`p-3 sm:p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
                         selectedTrack?.id === track.id
                           ? 'bg-green-500/10 border-green-500/30 ring-1 ring-green-500/20'
-                          : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8'
+                          : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8 active:bg-white/12'
                       }`}
                     >
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3 sm:gap-4">
                         {/* Track Thumbnail */}
-                        <div className={`w-14 h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 border transition-all duration-200 ${
+                        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 border transition-all duration-200 ${
                           selectedTrack?.id === track.id 
-                            ? 'border-white/30 ring-1 ring-white/20' 
+                            ? 'border-green-500/40 ring-1 ring-green-500/20 shadow-lg shadow-green-500/10' 
                             : 'border-white/10'
                         }`}>
                           <Image
@@ -1622,20 +1622,28 @@ Return ONLY the optimized script, ready for voice generation.`
                         </div>
                         
                         {/* Track Info */}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-white font-medium text-sm line-clamp-1 mb-1">
+                        <div className="flex-1 min-w-0 pr-2">
+                          <h4 className="text-white font-medium text-sm sm:text-base line-clamp-1 mb-1">
                             {track.title}
                           </h4>
-                          <p className="text-white/50 text-xs line-clamp-1 mb-1">
+                          <p className="text-white/50 text-xs sm:text-sm line-clamp-1 mb-1">
                             {track.artist}
                           </p>
-                          <p className="text-white/30 text-xs">
-                            {track.duration}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-white/30 text-xs">
+                              {track.duration}
+                            </p>
+                            {selectedTrack?.id === track.id && (
+                              <div className="flex items-center gap-1">
+                                <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                                <span className="text-green-400 text-xs font-medium">Selected</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2">
+                        {/* Action Button - Mobile Optimized */}
+                        <div className="flex items-center">
                           <Button
                             size="sm"
                             onClick={(e) => {
@@ -1657,54 +1665,46 @@ Return ONLY the optimized script, ready for voice generation.`
                                 youtubePlayerRef.current?.playVideo()
                               }
                             }}
-                            className={`text-xs px-3 py-2 rounded-lg font-medium transition-all duration-200 ${
+                            className={`text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium transition-all duration-200 min-w-[70px] sm:min-w-[80px] ${
                               selectedTrack?.id === track.id && playingVideoId && isPlaying
                                 ? 'bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 text-green-300'
                                 : selectedTrack?.id === track.id && !isPlaying && isPlayerReady
                                 ? 'bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300'
+                                : selectedTrack?.id === track.id && !isPlayerReady
+                                ? 'bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/40 text-orange-300'
                                 : 'bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 hover:text-white'
                             }`}
                           >
                             {selectedTrack?.id === track.id && playingVideoId && isPlaying ? (
-                              <>
-                                <Pause className="w-3 h-3 mr-1" />
-                                Pause
-                              </>
+                              <div className="flex items-center justify-center">
+                                <Pause className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Pause</span>
+                              </div>
                             ) : selectedTrack?.id === track.id && playerError ? (
-                              <>
-                                <RefreshCw className="w-3 h-3 mr-1" />
-                                Retry
-                              </>
+                              <div className="flex items-center justify-center">
+                                <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Retry</span>
+                              </div>
+                            ) : selectedTrack?.id === track.id && !isPlayerReady ? (
+                              <div className="flex items-center justify-center">
+                                <div className="w-3 h-3 sm:w-4 sm:h-4 border border-orange-300/50 border-t-orange-300 rounded-full animate-spin sm:mr-1"></div>
+                                <span className="hidden sm:inline">Loading</span>
+                              </div>
                             ) : (
-                              <>
-                                <Play className="w-3 h-3 mr-1" />
-                                Play
-                              </>
+                              <div className="flex items-center justify-center">
+                                <Play className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
+                                <span className="hidden sm:inline">Play</span>
+                              </div>
                             )}
                           </Button>
-                          
                         </div>
-                          
-                          {/* Selected Indicator */}
-                          {selectedTrack?.id === track.id && (
-                            <div className="flex items-center justify-center w-8 h-8 bg-green-500/20 border border-green-500/40 rounded-full flex-shrink-0">
-                              <Check className="w-4 h-4 text-green-400" />
-                            </div>
-                          )}
-                          
-                          {/* Selection Status Text */}
-                          {selectedTrack?.id === track.id && (
-                            <div className="text-xs text-green-400 font-medium">
-                              ✓ Selected
-                            </div>
-                          )}
                       </div>
 
                       {/* Timeline Progress Bar - Only show for currently playing track */}
                       {selectedTrack?.id === track.id && playingVideoId && isPlaying && (
-                        <div className="mt-3 pt-3 border-t border-white/10" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-white/50 w-10 text-right font-mono">
+                        <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/10" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            <span className="text-xs text-white/50 w-8 sm:w-10 text-right font-mono">
                               {formatTime(currentTime)}
                             </span>
                             <div className="flex-1 relative">
@@ -1716,13 +1716,15 @@ Return ONLY the optimized script, ready for voice generation.`
                                 onChange={handleSeek}
                                 onMouseDown={handleSeekStart}
                                 onMouseUp={handleSeekEnd}
-                                className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer slider-thumb"
+                                onTouchStart={handleSeekStart}
+                                onTouchEnd={handleSeekEnd}
+                                className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer slider-thumb touch-manipulation"
                                 style={{
-                                  background: `linear-gradient(to right, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.3) ${trackDuration > 0 ? (currentTime / trackDuration) * 100 : 0}%, rgba(255,255,255,0.1) ${trackDuration > 0 ? (currentTime / trackDuration) * 100 : 0}%, rgba(255,255,255,0.1) 100%)`
+                                  background: `linear-gradient(to right, rgba(34,197,94,0.6) 0%, rgba(34,197,94,0.6) ${trackDuration > 0 ? (currentTime / trackDuration) * 100 : 0}%, rgba(255,255,255,0.1) ${trackDuration > 0 ? (currentTime / trackDuration) * 100 : 0}%, rgba(255,255,255,0.1) 100%)`
                                 }}
                               />
                             </div>
-                            <span className="text-xs text-white/50 w-10 font-mono">
+                            <span className="text-xs text-white/50 w-8 sm:w-10 font-mono">
                               {formatTime(trackDuration)}
                             </span>
                           </div>
