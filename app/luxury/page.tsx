@@ -300,7 +300,7 @@ export default function LuxuryScriptGenerator() {
     
     setSelectedTrack(track)
     setPlayingVideoId(videoId)
-    setIsPlaying(true) // Auto-play when track is selected
+    setIsPlaying(false) // Don't assume playing until user interaction on mobile
     
     // Set a timeout to detect if player fails to initialize
     const timeout = setTimeout(() => {
@@ -1486,7 +1486,7 @@ Return ONLY the optimized script, ready for voice generation.`
                     height: '1',
                     playerVars: {
                       // Music Minimal configuration - works for YouTube Music content
-                      autoplay: 1,
+                      autoplay: 0, // Disabled for mobile compatibility
                       enablejsapi: 1,
                     },
                   }}
@@ -1500,7 +1500,21 @@ Return ONLY the optimized script, ready for voice generation.`
                       setInitTimeout(null)
                     }
                     
-                    toast.success(`Playing: ${selectedTrack?.title}`)
+                    // Automatically try to play on desktop, require click on mobile
+                    try {
+                      if (!/Mobile|Android|iPhone|iPad/.test(navigator.userAgent)) {
+                        // Desktop - try autoplay
+                        event.target.playVideo()
+                      } else {
+                        // Mobile - require user interaction
+                        setIsPlaying(false)
+                        toast.info(`Ready to play: ${selectedTrack?.title}. Click Play button.`)
+                      }
+                    } catch (error) {
+                      console.log('🎵 Could not auto-play, user interaction required:', error)
+                      setIsPlaying(false)
+                      toast.info(`Ready to play: ${selectedTrack?.title}. Click Play button.`)
+                    }
                   }}
                   onPlay={() => {
                     console.log('🎵 YouTube Music player started playing')
@@ -1548,18 +1562,18 @@ Return ONLY the optimized script, ready for voice generation.`
                   <span className="text-xs text-white/50">{musicTracks.length} tracks found</span>
                 </div>
                 
-                {/* Mobile Safari Warning */}
-                {playerError && /Safari/.test(navigator.userAgent) && /Mobile/.test(navigator.userAgent) && (
+                {/* Mobile Instructions and Safari Warning */}
+                {(/Mobile|Android|iPhone|iPad/.test(navigator.userAgent) || (playerError && /Safari/.test(navigator.userAgent) && /Mobile/.test(navigator.userAgent))) && (
                   <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                     <div className="flex items-start gap-3">
                       <div className="w-5 h-5 bg-amber-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
                         <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
                       </div>
                       <div>
-                        <h5 className="text-amber-200 font-medium text-sm mb-1">Music Playback Issue</h5>
+                        <h5 className="text-amber-200 font-medium text-sm mb-1">Mobile Music Playback</h5>
                         <p className="text-amber-200/80 text-xs leading-relaxed">
-                          YouTube music is restricted on mobile Safari. Try using Chrome or Firefox mobile for better music playback, 
-                          or use the Retry button below to attempt playback again.
+                          📱 On mobile devices, you need to manually tap the <strong>Play</strong> button to start music due to browser autoplay restrictions. 
+                          {playerError && ' If music fails to load, try the Retry button or switch to Chrome/Firefox mobile.'}
                         </p>
                       </div>
                     </div>
@@ -1645,7 +1659,9 @@ Return ONLY the optimized script, ready for voice generation.`
                             }}
                             className={`text-xs px-3 py-2 rounded-lg font-medium transition-all duration-200 ${
                               selectedTrack?.id === track.id && playingVideoId && isPlaying
-                                ? 'bg-white/20 hover:bg-white/30 border border-white/40 text-white'
+                                ? 'bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 text-green-300'
+                                : selectedTrack?.id === track.id && !isPlaying && isPlayerReady
+                                ? 'bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300'
                                 : 'bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 hover:text-white'
                             }`}
                           >
