@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
           statusText: response.statusText,
           headers: Object.fromEntries(response.headers.entries()),
           success: response.ok,
-          contentType: response.headers.get('content-type')
+          contentType: response.headers.get('content-type'),
+          hasVideoUnavailable: false,
+          htmlSnippet: ''
         })
 
         if (response.ok) {
@@ -69,7 +71,9 @@ export async function POST(request: NextRequest) {
         results.push({
           url,
           error: fetchError instanceof Error ? fetchError.message : 'Unknown error',
-          success: false
+          success: false,
+          hasVideoUnavailable: true,
+          htmlSnippet: ''
         })
       }
     }

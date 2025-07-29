@@ -46,6 +46,7 @@ const TEST_SOURCES = [
     id: 'yt1',
     title: 'YouTube via Server Proxy',
     type: 'youtube-proxy',
+    url: '',
     videoId: 'dQw4w9WgXcQ'
   }
 ]

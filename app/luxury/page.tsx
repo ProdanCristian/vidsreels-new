@@ -40,11 +40,6 @@ interface YoutubePlayer {
   pauseVideo: () => void;
 }
 
-interface YouTubePlayerEvent {
-  target: YoutubePlayer;
-  data: number;
-}
-
 interface YouTubePlayerError {
   data: number;
 }
@@ -1495,7 +1490,7 @@ Return ONLY the optimized script, ready for voice generation.`
                       enablejsapi: 1,
                     },
                   }}
-                  onReady={(event: YouTubePlayerEvent) => {
+                  onReady={(event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
                     console.log('🎵 YouTube player ready with Music Minimal config')
                     youtubePlayerRef.current = event.target
                     setIsPlayerReady(true)

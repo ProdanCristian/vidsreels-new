@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     await ytmusic.initialize()
     
     // Search for music based on the query
-    const searchResults = await ytmusic.searchSongs(query, { limit })
+    const searchResults = await ytmusic.searchSongs(query)
     
     
     // Helper function to convert seconds to MM:SS format
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
     }
 
-    const recommendedTracks = searchResults.map((song: Record<string, unknown>) => {
+    const recommendedTracks = searchResults.slice(0, limit).map((song: Record<string, unknown>) => {
       return {
         id: (song.videoId as string) || (song.id as string),
         name: (song.name as string) || (song.title as string),
