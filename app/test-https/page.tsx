@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Play, RefreshCw } from 'lucide-react'
+// import { Play, RefreshCw } from 'lucide-react' // Removed - not used
 import YouTube from 'react-youtube'
 
 // Simple test to compare HTTP vs HTTPS

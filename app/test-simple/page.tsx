@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Play, Pause, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 
 interface MusicTrack {
   id: string;

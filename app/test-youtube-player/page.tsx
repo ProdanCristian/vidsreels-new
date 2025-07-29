@@ -15,6 +15,13 @@ interface MusicTrack {
   artist: string;
 }
 
+interface YouTubeEvent {
+  target: {
+    playVideo: () => void;
+    pauseVideo: () => void;
+  };
+}
+
 // Player comparison configurations
 const PLAYER_CONFIGS = [
   {
@@ -73,7 +80,7 @@ export default function TestYouTubePlayerPage() {
   const [duration, setDuration] = useState(0)
 
   // Player refs
-  const reactYouTubeRef = useRef<any>(null)
+  const reactYouTubeRef = useRef<YouTubeEvent['target'] | null>(null)
   const youtubePlayerRef = useRef<any>(null)
   const playerContainerRef = useRef<HTMLDivElement>(null)
 
@@ -200,10 +207,10 @@ export default function TestYouTubePlayerPage() {
         player.getDuration().then((dur: number) => {
           setDuration(dur)
           addLog(`Duration: ${dur}s`)
-        }).catch((e: any) => addLog(`Duration error: ${e}`))
+        }).catch((e: Error) => addLog(`Duration error: ${e}`))
       })
 
-      player.on('stateChange', async (event: any) => {
+      player.on('stateChange', async () => {
         const state = await player.getPlayerState()
         addLog(`State change: ${state}`)
         
@@ -219,7 +226,7 @@ export default function TestYouTubePlayerPage() {
         }
       })
 
-      player.on('error', (error: any) => {
+      player.on('error', (error: Error) => {
         addLog(`youtube-player error: ${error}`)
         setPlayerError(`Error: ${error}`)
         setIsPlaying(false)
@@ -489,7 +496,7 @@ export default function TestYouTubePlayerPage() {
                 height: '1',
                 playerVars: selectedConfig.config,
               }}
-              onReady={(event: any) => {
+              onReady={(event: YouTubeEvent) => {
                 addLog('react-youtube ready')
                 reactYouTubeRef.current = event.target
                 setIsPlayerReady(true)
@@ -506,7 +513,7 @@ export default function TestYouTubePlayerPage() {
                 addLog('react-youtube ended')
                 setIsPlaying(false)
               }}
-              onError={(error: any) => {
+              onError={(error: { data: number }) => {
                 addLog(`react-youtube error: ${error.data}`)
                 setPlayerError(`Error: ${error.data}`)
                 setIsPlaying(false)

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Play, Pause, RefreshCw, Volume2 } from 'lucide-react'
+import { Play, Pause, RefreshCw } from 'lucide-react'
 
 // Alternative approaches to test
 const ALTERNATIVE_APPROACHES = [
@@ -56,7 +56,7 @@ export default function TestAlternativePage() {
   const [logs, setLogs] = useState<string[]>([])
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentOrigin, setCurrentOrigin] = useState('')
-  const [testKey, setTestKey] = useState(0)
+  // const [testKey, setTestKey] = useState(0) // Removed - not used
 
   const audioRef = useRef<HTMLAudioElement>(null)
 
@@ -76,7 +76,7 @@ export default function TestAlternativePage() {
   // Test different approaches
   const runTest = async () => {
     addLog(`Testing: ${selectedApproach.name} with ${selectedSource.title}`)
-    setTestKey(prev => prev + 1)
+    // setTestKey(prev => prev + 1) // Removed - not used
 
     try {
       switch (selectedApproach.type) {

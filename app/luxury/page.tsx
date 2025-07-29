@@ -83,7 +83,7 @@ export default function LuxuryScriptGenerator() {
   const [isPlayerReady, setIsPlayerReady] = useState(false)
   const [playerError, setPlayerError] = useState<string | null>(null)
   const [initTimeout, setInitTimeout] = useState<NodeJS.Timeout | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
+  // const [retryCount, setRetryCount] = useState(0) // Removed - not used in current implementation
 
   const audioRef = useRef<HTMLAudioElement>(null)
   const youtubePlayerRef = useRef<YoutubePlayer | null>(null)
@@ -300,7 +300,7 @@ export default function LuxuryScriptGenerator() {
     setTrackDuration(0)
     setPlayerError(null)
     setIsPlayerReady(false)
-    setRetryCount(0) // Reset retry count for new track
+    // setRetryCount(0) // Reset retry count for new track - variable removed
     youtubePlayerRef.current = null
     
     setSelectedTrack(track)
