@@ -137,8 +137,6 @@ const GridView = ({ videos, currentPage, totalPages, loadingMore, onPageChange, 
                     return; // Already marked as failed, ignore additional error events
                   }
                   
-                  console.log(`⚠️ Thumbnail failed for ${video.name}:`, video.thumbnailUrl);
-                  
                   // Mark this thumbnail as failed to prevent future requests
                   setFailedThumbnails(prev => {
                     const newSet = new Set(prev)

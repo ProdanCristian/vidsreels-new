@@ -25,12 +25,10 @@ async function getVideosFromDatabase(page: number, limit: number, shuffle: boole
   hasMore: boolean
 }> {
   try {
-    console.log(`🔍 Fetching videos: page=${page}, limit=${limit}, shuffle=${shuffle}`)
     
     // Get total count efficiently
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const totalCount = await (prisma as any).luxuryVideos.count()
-    console.log(`📊 Total videos in database: ${totalCount}`)
     
     // Optimize query based on shuffle requirement
     let videos
@@ -65,17 +63,11 @@ async function getVideosFromDatabase(page: number, limit: number, shuffle: boole
       })
     }
 
-    console.log(`✅ Found ${videos.length} videos from database`)
-
     // Convert to VideoFile format using stored URLs
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const optimizedVideos: VideoFile[] = videos.map((video: any) => {
       // Extract filename from s3Key for display
       const filename = video.s3Key.split('/').pop() || video.s3Key
-      
-      console.log(`🎬 Processing video: ${video.s3Key}`)
-      console.log(`   Video URL: ${video.videoUrl}`)
-      console.log(`   Thumbnail: ${video.thumbnailUrl}`)
       
       return {
         id: video.s3Key,
@@ -101,8 +93,6 @@ async function getVideosFromDatabase(page: number, limit: number, shuffle: boole
       ? totalCount > 1000 // For shuffle, conservative estimate
       : (page * limit) < totalCount
 
-    console.log(`🚀 Returning ${optimizedVideos.length} videos, hasMore=${hasMore}`)
-
     return {
       videos: optimizedVideos,
       totalCount,
@@ -119,7 +109,6 @@ async function getVideosFromDatabase(page: number, limit: number, shuffle: boole
  */
 async function deleteVideoFromR2(s3Key: string): Promise<void> {
   try {
-    console.log(`🗑️ Deleting video from R2: ${s3Key}`)
     
     const deleteCommand = new DeleteObjectCommand({
       Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
@@ -127,7 +116,6 @@ async function deleteVideoFromR2(s3Key: string): Promise<void> {
     })
     
     await r2Client.send(deleteCommand)
-    console.log(`✅ Successfully deleted video from R2: ${s3Key}`)
   } catch (error) {
     console.error(`❌ Failed to delete video from R2: ${s3Key}`, error)
     throw error
@@ -143,15 +131,12 @@ async function deleteThumbnailFromR2(thumbnailUrl: string): Promise<void> {
     const url = new URL(thumbnailUrl)
     const thumbnailKey = url.pathname.substring(1) // Remove leading slash
     
-    console.log(`🗑️ Deleting thumbnail from R2: ${thumbnailKey}`)
-    
     const deleteCommand = new DeleteObjectCommand({
       Bucket: process.env.CLOUDFLARE_R2_BUCKET!,
       Key: thumbnailKey,
     })
     
     await r2Client.send(deleteCommand)
-    console.log(`✅ Successfully deleted thumbnail from R2: ${thumbnailKey}`)
   } catch (error) {
     console.error(`❌ Failed to delete thumbnail from R2: ${thumbnailUrl}`, error)
     throw error
@@ -163,7 +148,6 @@ async function deleteThumbnailFromR2(thumbnailUrl: string): Promise<void> {
  */
 async function deleteVideoFromDatabase(s3Key: string): Promise<void> {
   try {
-    console.log(`🗑️ Deleting video from database: ${s3Key}`)
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any).luxuryVideos.delete({
@@ -172,7 +156,6 @@ async function deleteVideoFromDatabase(s3Key: string): Promise<void> {
       },
     })
     
-    console.log(`✅ Successfully deleted video from database: ${s3Key}`)
   } catch (error) {
     console.error(`❌ Failed to delete video from database: ${s3Key}`, error)
     throw error
@@ -190,14 +173,10 @@ export async function GET(
     const shuffle = searchParams.get('shuffle') === 'true'
     const { collectionId } = await params
 
-    console.log(`🎬 API request: collection=${collectionId}, page=${page}, limit=${limit}, shuffle=${shuffle}`)
-
     // Handle different collection types
     if (collectionId === 'luxury') {
       // Get videos using stored URLs for luxury collection
       const result = await getVideosFromDatabase(page, limit, shuffle)
-
-      console.log(`✅ API response: ${result.videos.length} videos, hasMore=${result.hasMore}, total=${result.totalCount}`)
 
       // Add performance headers
       const response = NextResponse.json({
@@ -224,7 +203,6 @@ export async function GET(
 
     } else {
       // For other collections (tech, fashion, travel, food, fitness), return empty results
-      console.log(`📭 Collection '${collectionId}' not available yet`)
       
       const response = NextResponse.json({
         videos: [],
@@ -268,8 +246,6 @@ export async function DELETE(
       )
     }
 
-    console.log(`🗑️ Delete request for video s3Key: ${videoId}`)
-
     // Get video details before deletion
     // Note: videoId is actually the s3Key from the frontend
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -303,8 +279,6 @@ export async function DELETE(
     // Execute all deletions in parallel
     await Promise.all(deletionPromises)
 
-    console.log(`✅ Successfully deleted video: ${videoId}`)
-    
     return NextResponse.json({
       success: true,
       message: 'Video deleted successfully',

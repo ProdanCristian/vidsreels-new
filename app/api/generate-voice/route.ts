@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, voiceId = 'pNInz6obpgDQGcFmaJgB' } = await request.json() // Default to Adam voice
+    const { text, reference_id, speed = 1.0, temperature = 0.9, top_p = 0.9 } = await request.json()
 
     if (!text) {
       return NextResponse.json(
@@ -11,40 +11,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
+    const FISHAUDIO_API_KEY = process.env.FISHAUDIO_API_KEY
     
-    if (!ELEVENLABS_API_KEY) {
+    if (!FISHAUDIO_API_KEY) {
       return NextResponse.json(
-        { error: 'ElevenLabs API key not configured' },
+        { error: 'Fish Audio API key not configured' },
         { status: 500 }
       )
     }
 
-    // Call ElevenLabs API
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    // Prepare the request data for Fish Audio API v1
+    const requestData = {
+      text: text,
+      temperature: temperature,
+      top_p: top_p,
+      reference_id: reference_id || null,
+      chunk_length: 200,
+      normalize: false, // Disabled for emotion control tags
+      format: "mp3",
+      mp3_bitrate: 128,
+      latency: "normal",
+      speed: speed // Voice speed control
+    }
+
+    // Try JSON first, fallback to MessagePack if needed
+    const response = await fetch('https://api.fish.audio/v1/tts', {
       method: 'POST',
       headers: {
-        'Accept': 'audio/mpeg',
+        'Authorization': `Bearer ${FISHAUDIO_API_KEY}`,
         'Content-Type': 'application/json',
-        'xi-api-key': ELEVENLABS_API_KEY,
+        'model': 's1', // Use the latest recommended model
       },
-      body: JSON.stringify({
-        text: text,
-        model_id: 'eleven_monolingual_v1',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.5,
-          style: 0.0,
-          use_speaker_boost: true
-        }
-      }),
+      body: JSON.stringify(requestData),
     })
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('ElevenLabs API error:', errorText)
+      console.error('Fish Audio API error:', errorText)
       return NextResponse.json(
-        { error: 'Failed to generate voice' },
+        { error: 'Failed to generate voice with Fish Audio' },
         { status: response.status }
       )
     }
@@ -62,7 +67,7 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Voice generation error:', error)
+    console.error('Fish Audio voice generation error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

@@ -86,10 +86,7 @@ export default function Dashboard() {
                   {/* CTA Button with card hover effects */}
                   <button
                     className="px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full font-medium text-white text-sm border border-white/30 hover:bg-white/30 hover:border-white/50 group-hover:bg-white/35 group-hover:border-white/60 group-hover:scale-105 transform transition-all duration-200 shadow-lg"
-                    onClick={e => {
-                      e.stopPropagation()
-                      handleViewCollection("luxury")
-                    }}
+                    onClick={() => luxury()}
                   >
                     <div className="flex items-center gap-2">
                       <Play className="w-3 h-3" fill="currentColor" />

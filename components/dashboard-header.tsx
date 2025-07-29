@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,16 +9,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import Logo from "@/components/logo"
 import { LogOut, User } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
+import Image from "next/image"
 
 export default function DashboardHeader() {
   const { data: session } = useSession()
   const router = useRouter()
-
-
 
   const handleSignOut = async () => {
     await signOut({
@@ -45,12 +44,13 @@ export default function DashboardHeader() {
           {/* User Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Avatar className="h-10 w-10 border-1">
+                <Avatar className="h-10 w-10">
                   {session?.user?.image && (
-                    <AvatarImage 
+                    <Image
                       src={session.user.image} 
                       alt={session.user.name || session.user.email || "User"}
+                      width={40}
+                      height={40}
                     />
                   )}
                   <AvatarFallback className="bg-white text-black">
@@ -59,7 +59,6 @@ export default function DashboardHeader() {
                       : session?.user?.email?.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <div className="flex flex-col space-y-1 p-2">
