@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useRef, useEffect } from 'react'
-import { toast } from "sonner"
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -82,6 +81,23 @@ export default function LuxuryScriptGenerator() {
 
   const audioRef = useRef<HTMLAudioElement>(null)
   const youtubePlayerRef = useRef<YoutubePlayer | null>(null)
+  
+  // Section refs for auto-scroll
+  const personSectionRef = useRef<HTMLDivElement>(null)
+  const scriptSectionRef = useRef<HTMLDivElement>(null)
+  const voiceSectionRef = useRef<HTMLDivElement>(null)
+  const musicSectionRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll helper function
+  const scrollToSection = (ref: React.RefObject<HTMLDivElement>, delay = 500) => {
+    setTimeout(() => {
+      ref.current?.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start',
+        inline: 'nearest'
+      })
+    }, delay)
+  }
 
   // Update timeline progress
   useEffect(() => {
@@ -211,7 +227,6 @@ export default function LuxuryScriptGenerator() {
       setMusicTracks(tracks)
     } catch (error) {
       console.error('🎵 Error searching music:', error)
-      toast.error('Failed to search music')
     } finally {
       setIsLoadingMusic(false)
     }
@@ -237,10 +252,7 @@ export default function LuxuryScriptGenerator() {
         }
       }
       
-      toast.info('Reloading track...')
       playTrack(selectedTrack)
-    } else {
-      toast.error('No track selected to retry.')
     }
   }
 
@@ -248,7 +260,6 @@ export default function LuxuryScriptGenerator() {
   const playTrack = (track: MusicTrack) => {
     if (!track || !track.url) {
       console.log('🎵 Invalid track provided:', track)
-      toast.error('Invalid track selected')
       return
     }
 
@@ -256,14 +267,13 @@ export default function LuxuryScriptGenerator() {
     console.log('🎵 playTrack called:', track.title, 'VideoID:', videoId, 'URL:', track.url)
     
     if (!videoId) {
-      toast.error(`Unable to play "${track.title}" - invalid video URL`)
+      console.log(`🎵 Unable to play "${track.title}" - invalid video URL`)
       return
     }
 
     // Additional validation for YouTube video ID format
     if (!/^[a-zA-Z0-9_-]{10,12}$/.test(videoId)) {
       console.log('🎵 Invalid video ID format:', videoId)
-      toast.error(`Unable to play "${track.title}" - invalid video format`)
       return
     }
 
@@ -308,7 +318,6 @@ export default function LuxuryScriptGenerator() {
         console.log('🎵 Player initialization timeout - player failed to load')
         setPlayerError('Player failed to initialize')
         setIsPlaying(false)
-        toast.error('Track failed to load. Please try another one.')
       }
     }, 5000) // 5 seconds should be enough for most tracks to load
     
@@ -515,7 +524,6 @@ ${person.name.toUpperCase()} STYLE CHARACTERISTICS:`
   // Generate script only
   const handleGenerateScript = async () => {
     if (!selectedPerson) {
-      toast.error('Please select a famous person first!')
       return
     }
 
@@ -540,11 +548,10 @@ ${person.name.toUpperCase()} STYLE CHARACTERISTICS:`
       if (!script) throw new Error('No script generated')
       
       setGeneratedScript(script)
-      toast.success('Script generated successfully!')
+      scrollToSection(voiceSectionRef, 800)
 
     } catch (error) {
       console.error('Error generating script:', error)
-      toast.error('Failed to generate script. Please try again.')
     } finally {
       setIsGenerating(false)
     }
@@ -553,12 +560,10 @@ ${person.name.toUpperCase()} STYLE CHARACTERISTICS:`
   // Optimize custom script for voice generation
   const handleOptimizeScript = async () => {
     if (!selectedPerson) {
-      toast.error('Please select a famous person first!')
       return
     }
 
     if (!customScript.trim()) {
-      toast.error('Please enter a custom script first!')
       return
     }
 
@@ -602,11 +607,9 @@ Return ONLY the optimized script, ready for voice generation.`
       if (!optimizedScript) throw new Error('No optimized script received')
       
       setCustomScript(optimizedScript)
-      toast.success('Script optimized for voice generation!')
 
     } catch (error) {
       console.error('Error optimizing script:', error)
-      toast.error('Failed to optimize script. Please try again.')
     } finally {
       setIsOptimizingScript(false)
     }
@@ -615,12 +618,10 @@ Return ONLY the optimized script, ready for voice generation.`
   // Handle voice generation (simplified for single script)
   const handleGenerateVoice = async () => {
     if (!generatedScript) {
-      toast.error('Please generate a script first!')
       return
     }
 
     if (!selectedPerson?.voiceModelId) {
-      toast.error('Voice model not available for this person')
       return
     }
 
@@ -644,14 +645,13 @@ Return ONLY the optimized script, ready for voice generation.`
       const audioBlob = await response.blob()
       const url = URL.createObjectURL(audioBlob)
       setAudioUrl(url)
-      toast.success('Voice generated successfully!')
       
       // Load music after voice generation
       await loadStandardMusic()
+      scrollToSection(musicSectionRef, 1000)
       
     } catch (error) {
       console.error('Error generating voice:', error)
-      toast.error('Failed to generate voice. Please try again.')
     } finally {
       setIsGeneratingVoice(false)
     }
@@ -689,7 +689,7 @@ Return ONLY the optimized script, ready for voice generation.`
         </div>
 
         {/* Famous Person Selection - Trigger Button */}
-        <div className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-6 sm:mb-8 rounded-2xl overflow-hidden">
+        <div ref={personSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-6 sm:mb-8 rounded-2xl overflow-hidden">
           <div className="p-4 sm:p-6">
             <div className="flex items-center gap-3 mb-4 sm:mb-6">
               <div className="w-7 h-7 bg-white/10 text-white/60 rounded-full flex items-center justify-center text-xs font-medium border border-white/20">
@@ -699,9 +699,9 @@ Return ONLY the optimized script, ready for voice generation.`
             </div>
             
             {selectedPerson ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-white font-bold text-xl ring-1 ring-white/20">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-white font-bold text-lg sm:text-xl ring-2 ring-white/20 flex-shrink-0">
                     {selectedPerson.image ? (
                       <Image
                         src={selectedPerson.image}
@@ -716,15 +716,20 @@ Return ONLY the optimized script, ready for voice generation.`
                       </div>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-white text-lg mb-1">{selectedPerson.name}</h3>
-                    <p className="text-xs text-white/60 mb-1">{selectedPerson.category}</p>
-                    <p className="text-xs text-white/80">{selectedPerson.description}</p>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-white text-base sm:text-lg mb-1 line-clamp-1">{selectedPerson.name}</h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`px-2 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r ${getPersonGradient(selectedPerson.category)} bg-opacity-20 border border-white/20`}>
+                        {selectedPerson.category}
+                      </div>
+                    </div>
+                    <p className="text-xs sm:text-sm text-white/70 line-clamp-2 sm:line-clamp-1 leading-relaxed">{selectedPerson.description}</p>
                   </div>
                 </div>
                 <Dialog open={isPersonModalOpen} onOpenChange={setIsPersonModalOpen}>
                   <DialogTrigger asChild>
-                    <Button className="bg-white/20 hover:bg-white/30 border border-white/30 text-white">
+                    <Button className="bg-white/20 hover:bg-white/30 border border-white/30 text-white w-full sm:w-auto px-4 py-2 sm:px-6 sm:py-3 text-sm font-medium">
+                      <Edit3 className="w-4 h-4 mr-2" />
                       Change Person
                     </Button>
                   </DialogTrigger>
@@ -735,22 +740,23 @@ Return ONLY the optimized script, ready for voice generation.`
                         Choose Your Famous Person
                       </DialogTitle>
                     </DialogHeader>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-4 mt-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
                       {famousPeople.map((person) => (
                         <div
                           key={person.id}
                           onClick={() => {
                             setSelectedPerson(person)
                             setIsPersonModalOpen(false)
+                            scrollToSection(scriptSectionRef, 800)
                           }}
-                          className={`relative p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
+                          className={`relative p-3 sm:p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
                             selectedPerson?.id === person.id
-                              ? 'bg-white/20 border-white/40 ring-2 ring-white/30'
-                              : 'bg-black/30 border-white/10 hover:border-white/30 hover:bg-white/10'
+                              ? 'bg-white/20 border-white/40 ring-2 ring-white/30 shadow-lg'
+                              : 'bg-black/30 border-white/10 hover:border-white/30 hover:bg-white/10 active:bg-white/15'
                           }`}
                         >
                           {/* Avatar */}
-                          <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-white font-bold text-xl mb-3 mx-auto ring-1 ring-white/20 hover:ring-white/40 shadow-lg transition-all duration-300 group-hover:scale-105">
+                          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-white font-bold text-lg sm:text-xl mb-3 mx-auto ring-1 ring-white/20 hover:ring-white/40 shadow-lg transition-all duration-300 flex-shrink-0">
                             {person.image ? (
                               <Image
                                 src={person.image}
@@ -768,18 +774,20 @@ Return ONLY the optimized script, ready for voice generation.`
                           
                           {/* Person Info */}
                           <div className="text-center">
-                            <h3 className="font-semibold text-white text-lg mb-1">{person.name}</h3>
-                            <p className="text-xs text-white/60 mb-2">{person.category}</p>
-                            <p className="text-xs text-white/80 mb-3 line-clamp-2">{person.description}</p>
+                            <h3 className="font-bold text-white text-base sm:text-lg mb-1 line-clamp-1">{person.name}</h3>
+                            <div className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full mb-2 bg-gradient-to-r ${getPersonGradient(person.category)} bg-opacity-20 border border-white/20`}>
+                              <span className="font-medium">{person.category}</span>
+                            </div>
+                            <p className="text-xs sm:text-sm text-white/70 mb-3 line-clamp-2 leading-relaxed px-1">{person.description}</p>
                             
                             {/* Voice Status */}
-                            <div className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md ${
+                            <div className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full font-medium ${
                               person.voiceModelId 
-                                ? 'bg-green-500/20 text-green-300' 
-                                : 'bg-yellow-500/20 text-yellow-300'
+                                ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
+                                : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
                             }`}>
                               <Mic className="w-3 h-3" />
-                              {person.voiceModelId ? 'Voice Available' : 'Voice Coming Soon'}
+                              {person.voiceModelId ? 'Voice Ready' : 'Coming Soon'}
                             </div>
                           </div>
 
@@ -798,8 +806,8 @@ Return ONLY the optimized script, ready for voice generation.`
             ) : (
               <Dialog open={isPersonModalOpen} onOpenChange={setIsPersonModalOpen}>
                 <DialogTrigger asChild>
-                  <Button className="w-full bg-white/20 hover:bg-white/30 border border-white/30 text-white py-8 text-lg">
-                    <Crown className="w-6 h-6 mr-2" />
+                  <Button className="w-full bg-white/20 hover:bg-white/30 border border-white/30 text-white py-6 sm:py-8 text-base sm:text-lg font-medium">
+                    <Crown className="w-5 h-5 sm:w-6 sm:h-6 mr-2" />
                     Select Famous Person
                   </Button>
                 </DialogTrigger>
@@ -810,18 +818,19 @@ Return ONLY the optimized script, ready for voice generation.`
                       Choose Your Famous Person
                     </DialogTitle>
                   </DialogHeader>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-4 mt-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
                     {famousPeople.map((person) => (
                       <div
                         key={person.id}
                         onClick={() => {
                           setSelectedPerson(person)
                           setIsPersonModalOpen(false)
+                          scrollToSection(scriptSectionRef, 800)
                         }}
-                        className="relative p-4 rounded-xl border cursor-pointer transition-all duration-200 bg-black/30 border-white/10 hover:border-white/30 hover:bg-white/10"
+                        className="relative p-3 sm:p-4 rounded-xl border cursor-pointer transition-all duration-200 bg-black/30 border-white/10 hover:border-white/30 hover:bg-white/10 active:bg-white/15"
                       >
                         {/* Avatar */}
-                        <div className="w-16 h-16 rounded-full overflow-hidden bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-white font-bold text-xl mb-3 mx-auto ring-1 ring-white/20 hover:ring-white/40 shadow-lg transition-all duration-300 group-hover:scale-105">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-white font-bold text-lg sm:text-xl mb-3 mx-auto ring-1 ring-white/20 hover:ring-white/40 shadow-lg transition-all duration-300 flex-shrink-0">
                           {person.image ? (
                             <Image
                               src={person.image}
@@ -839,18 +848,20 @@ Return ONLY the optimized script, ready for voice generation.`
                         
                         {/* Person Info */}
                         <div className="text-center">
-                          <h3 className="font-semibold text-white text-lg mb-1">{person.name}</h3>
-                          <p className="text-xs text-white/60 mb-2">{person.category}</p>
-                          <p className="text-xs text-white/80 mb-3 line-clamp-2">{person.description}</p>
+                          <h3 className="font-bold text-white text-base sm:text-lg mb-1 line-clamp-1">{person.name}</h3>
+                          <div className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full mb-2 bg-gradient-to-r ${getPersonGradient(person.category)} bg-opacity-20 border border-white/20`}>
+                            <span className="font-medium">{person.category}</span>
+                          </div>
+                          <p className="text-xs sm:text-sm text-white/70 mb-3 line-clamp-2 leading-relaxed px-1">{person.description}</p>
                           
                           {/* Voice Status */}
-                          <div className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md ${
+                          <div className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-full font-medium ${
                             person.voiceModelId 
-                              ? 'bg-green-500/20 text-green-300' 
-                              : 'bg-yellow-500/20 text-yellow-300'
+                              ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
+                              : 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
                           }`}>
                             <Mic className="w-3 h-3" />
-                            {person.voiceModelId ? 'Voice Available' : 'Voice Coming Soon'}
+                            {person.voiceModelId ? 'Voice Ready' : 'Coming Soon'}
                           </div>
                         </div>
                       </div>
@@ -864,7 +875,7 @@ Return ONLY the optimized script, ready for voice generation.`
 
         {/* Configuration & Generation */}
         {selectedPerson && (
-          <div className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-8 rounded-2xl overflow-hidden">
+          <div ref={scriptSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-8 rounded-2xl overflow-hidden">
             <div className="p-6">
               <h3 className="text-white flex items-center gap-3 text-base font-medium mb-4">
                 <div className="w-7 h-7 bg-white/10 text-white/60 rounded-full flex items-center justify-center text-xs font-medium border border-white/20">
@@ -1005,11 +1016,10 @@ Return ONLY the optimized script, ready for voice generation.`
                   <Button 
                     onClick={() => {
                       if (!customScript.trim()) {
-                        toast.error('Please enter a custom script first!')
                         return
                       }
                       setGeneratedScript(customScript.trim())
-                      toast.success('Custom script loaded successfully!')
+                      scrollToSection(voiceSectionRef, 500)
                     }}
                     disabled={!selectedPerson || !customScript.trim()}
                     className="w-full bg-white/20 hover:bg-white/30 border border-white/30 hover:border-white/50 text-white font-medium py-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1089,7 +1099,6 @@ Return ONLY the optimized script, ready for voice generation.`
                       <Button
                         onClick={() => {
                           setIsEditingScript(false)
-                          toast.success('Script updated successfully!')
                         }}
                         size="sm"
                         className="bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-300 text-xs px-3 py-1"
@@ -1116,7 +1125,7 @@ Return ONLY the optimized script, ready for voice generation.`
 
         {/* Voice Generation Section - Only show after script is ready */}
         {generatedScript && (
-          <div className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-8 rounded-2xl overflow-hidden">
+          <div ref={voiceSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-8 rounded-2xl overflow-hidden">
             <div className="p-6">
               <h3 className="text-white flex items-center gap-3 text-base font-medium mb-4">
                 <div className="w-7 h-7 bg-white/10 text-white/60 rounded-full flex items-center justify-center text-xs font-medium border border-white/20">
@@ -1401,7 +1410,7 @@ Return ONLY the optimized script, ready for voice generation.`
 
         {/* Music Search and Player Section - Only show after voice is generated */}
         {audioUrl && (
-          <div className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mt-8 rounded-2xl overflow-hidden">
+          <div ref={musicSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mt-8 rounded-2xl overflow-hidden">
             <div className="p-6">
               <h3 className="text-white flex items-center gap-3 text-base font-medium mb-4">
                 <div className="w-7 h-7 bg-white/10 text-white/60 rounded-full flex items-center justify-center text-xs font-medium border border-white/20">
@@ -1500,20 +1509,12 @@ Return ONLY the optimized script, ready for voice generation.`
                       setInitTimeout(null)
                     }
                     
-                    // Automatically try to play on desktop, require click on mobile
+                    // Always try to play when ready
                     try {
-                      if (!/Mobile|Android|iPhone|iPad/.test(navigator.userAgent)) {
-                        // Desktop - try autoplay
-                        event.target.playVideo()
-                      } else {
-                        // Mobile - require user interaction
-                        setIsPlaying(false)
-                        toast.info(`Ready to play: ${selectedTrack?.title}. Click Play button.`)
-                      }
+                      event.target.playVideo()
                     } catch (error) {
                       console.log('🎵 Could not auto-play, user interaction required:', error)
                       setIsPlaying(false)
-                      toast.info(`Ready to play: ${selectedTrack?.title}. Click Play button.`)
                     }
                   }}
                   onPlay={() => {
@@ -1534,9 +1535,9 @@ Return ONLY the optimized script, ready for voice generation.`
                     console.log('🎵 YouTube Music player error:', errorCode)
                     
                     if (errorCode === 150 || errorCode === 101) {
-                      toast.error('Music track restricted. Trying another...')
+                      console.log('🎵 Music track restricted')
                     } else {
-                      toast.error('Failed to load music track')
+                      console.log('🎵 Failed to load music track')
                     }
                     
                     setPlayerError(`Error: ${errorCode}`)
@@ -1661,39 +1662,32 @@ Return ONLY the optimized script, ready for voice generation.`
                               
                               if (isPlaying) {
                                 youtubePlayerRef.current?.pauseVideo()
-                              } else if (isPlayerReady) {
+                              } else {
                                 youtubePlayerRef.current?.playVideo()
                               }
                             }}
-                            className={`text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-medium transition-all duration-200 min-w-[70px] sm:min-w-[80px] ${
+                            className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
                               selectedTrack?.id === track.id && playingVideoId && isPlaying
-                                ? 'bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 text-green-300'
-                                : selectedTrack?.id === track.id && !isPlaying && isPlayerReady
-                                ? 'bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-300'
-                                : selectedTrack?.id === track.id && !isPlayerReady
-                                ? 'bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/40 text-orange-300'
-                                : 'bg-white/10 hover:bg-white/20 border border-white/20 text-white/80 hover:text-white'
+                                ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
+                                : selectedTrack?.id === track.id && !isPlaying
+                                ? 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
+                                : 'bg-white/10 hover:bg-white/20 border border-white/30 text-white/90 hover:text-white hover:border-white/50'
                             }`}
                           >
                             {selectedTrack?.id === track.id && playingVideoId && isPlaying ? (
-                              <div className="flex items-center justify-center">
-                                <Pause className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
-                                <span className="hidden sm:inline">Pause</span>
+                              <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                <Pause className="w-4 h-4" />
+                                <span className="font-semibold">PAUSE</span>
                               </div>
                             ) : selectedTrack?.id === track.id && playerError ? (
-                              <div className="flex items-center justify-center">
-                                <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
-                                <span className="hidden sm:inline">Retry</span>
-                              </div>
-                            ) : selectedTrack?.id === track.id && !isPlayerReady ? (
-                              <div className="flex items-center justify-center">
-                                <div className="w-3 h-3 sm:w-4 sm:h-4 border border-orange-300/50 border-t-orange-300 rounded-full animate-spin sm:mr-1"></div>
-                                <span className="hidden sm:inline">Loading</span>
+                              <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                <RefreshCw className="w-4 h-4" />
+                                <span className="font-semibold">RETRY</span>
                               </div>
                             ) : (
-                              <div className="flex items-center justify-center">
-                                <Play className="w-3 h-3 sm:w-4 sm:h-4 sm:mr-1" />
-                                <span className="hidden sm:inline">Play</span>
+                              <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                <Play className="w-4 h-4" />
+                                <span className="font-semibold">PLAY</span>
                               </div>
                             )}
                           </Button>
