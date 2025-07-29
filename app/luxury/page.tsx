@@ -738,18 +738,18 @@ Return ONLY the optimized script, ready for voice generation.`
         </div>
 
         {/* Progress Indicator - Sticky */}
-        <div className="sticky top-16 z-40 bg-background/95 backdrop-blur-md border-b border-white/10 py-4 mb-8">
-          <div className="flex items-center justify-center gap-4 mb-4">
+        <div className="sticky top-19 z-40 bg-background/10 backdrop-blur-md border-b border-white/10 py-3 sm:py-4 mb-6 sm:mb-8">
+          <div className="flex items-center justify-center gap-1 sm:gap-2 md:gap-4 mb-3 sm:mb-4 px-2 sm:px-4">
             {/* Step 1: Person Selection */}
-            <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
+            <div className="flex items-center gap-1 sm:gap-2">
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 0 
                   ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
                   : 'bg-white/10 border-white/20 text-white/60'
               }`}>
                 1
               </div>
-              <span className={`text-sm font-medium transition-all duration-300 ${
+              <span className={`text-xs sm:text-sm font-medium transition-all duration-300 hidden sm:inline ${
                 currentStep >= 0 ? 'text-white' : 'text-white/60'
               }`}>
                 Person
@@ -757,20 +757,20 @@ Return ONLY the optimized script, ready for voice generation.`
             </div>
 
             {/* Connection Line */}
-            <div className={`w-16 h-1 rounded-full transition-all duration-500 ${
+            <div className={`w-4 sm:w-8 md:w-16 h-0.5 sm:h-1 rounded-full transition-all duration-500 ${
               currentStep >= 1 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-white/20'
             }`}></div>
 
             {/* Step 2: Script Generation */}
-            <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
+            <div className="flex items-center gap-1 sm:gap-2">
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 1 
                   ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
                   : 'bg-white/10 border-white/20 text-white/60'
               }`}>
                 2
               </div>
-              <span className={`text-sm font-medium transition-all duration-300 ${
+              <span className={`text-xs sm:text-sm font-medium transition-all duration-300 hidden sm:inline ${
                 currentStep >= 1 ? 'text-white' : 'text-white/60'
               }`}>
                 Script
@@ -778,20 +778,20 @@ Return ONLY the optimized script, ready for voice generation.`
             </div>
 
             {/* Connection Line */}
-            <div className={`w-16 h-1 rounded-full transition-all duration-500 ${
+            <div className={`w-4 sm:w-8 md:w-16 h-0.5 sm:h-1 rounded-full transition-all duration-500 ${
               currentStep >= 2 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-white/20'
             }`}></div>
 
             {/* Step 3: Voice Generation */}
-            <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
+            <div className="flex items-center gap-1 sm:gap-2">
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 2 
                   ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
                   : 'bg-white/10 border-white/20 text-white/60'
               }`}>
                 3
               </div>
-              <span className={`text-sm font-medium transition-all duration-300 ${
+              <span className={`text-xs sm:text-sm font-medium transition-all duration-300 hidden sm:inline ${
                 currentStep >= 2 ? 'text-white' : 'text-white/60'
               }`}>
                 Voice
@@ -799,20 +799,20 @@ Return ONLY the optimized script, ready for voice generation.`
             </div>
 
             {/* Connection Line */}
-            <div className={`w-16 h-1 rounded-full transition-all duration-500 ${
+            <div className={`w-4 sm:w-8 md:w-16 h-0.5 sm:h-1 rounded-full transition-all duration-500 ${
               currentStep >= 3 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-white/20'
             }`}></div>
 
             {/* Step 4: Music Selection */}
-            <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
+            <div className="flex items-center gap-1 sm:gap-2">
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 3 
                   ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
                   : 'bg-white/10 border-white/20 text-white/60'
               }`}>
                 4
               </div>
-              <span className={`text-sm font-medium transition-all duration-300 ${
+              <span className={`text-xs sm:text-sm font-medium transition-all duration-300 hidden sm:inline ${
                 currentStep >= 3 ? 'text-white' : 'text-white/60'
               }`}>
                 Music
