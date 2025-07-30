@@ -352,7 +352,41 @@ export default function LuxuryScriptGenerator() {
     }
   }
 
-  // Simplified track selection - mobile optimized
+  // Select track without playing - for card clicks
+  const selectTrackOnly = (track: MusicTrack) => {
+    console.log('🎵 Selecting track (no auto-play):', track.title)
+    
+    const videoId = extractVideoId(track.url)
+    if (!videoId) {
+      console.log('🎵 Invalid video URL')
+      return
+    }
+
+    // If same track is already selected, do nothing (play/pause only via button)
+    if (selectedTrack?.id === track.id) {
+      console.log('🎵 Track already selected, use play button to control playback')
+      return
+    }
+
+    setSelectedTrack(track)
+    setIsPlaying(false)
+    
+    // Never auto-play when selecting via card click
+    setShouldAutoPlay(false)
+    
+    // Reset timeline for new track
+    setCurrentTime(0)
+    setTrackDuration(0)
+    setIsSeeking(false)
+    setIsPlayerReady(false)
+    
+    // Always recreate player for new track to ensure clean state
+    setPlayingVideoId(videoId)
+    setPlayerKey(prev => prev + 1)
+    console.log('🎵 Track selected (ready for manual play):', track.title)
+  }
+
+  // Simplified track selection - mobile optimized (kept for backward compatibility)
   const playTrack = (track: MusicTrack) => {
     console.log('🎵 Selecting new track:', track.title)
     
@@ -1722,13 +1756,8 @@ Return ONLY the optimized script, ready for voice generation.`
                           return
                         }
                         
-                        // If track is already selected, toggle play/pause directly
-                        if (selectedTrack?.id === track.id) {
-                          handlePlayMusic() // Use consistent play/pause logic
-                        } else {
-                          // Select new track (will auto-play when ready)
-                          playTrack(track)
-                        }
+                        // Only select the track, never trigger play/pause
+                        selectTrackOnly(track)
                       }}
                       className={`p-3 sm:p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
                         selectedTrack?.id === track.id
@@ -1834,7 +1863,7 @@ Return ONLY the optimized script, ready for voice generation.`
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                playTrack(track)
+                                selectTrackOnly(track)
                               }}
                               className="text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] bg-white/10 hover:bg-white/20 border border-white/30 text-white/90 hover:text-white hover:border-white/50"
                             >
