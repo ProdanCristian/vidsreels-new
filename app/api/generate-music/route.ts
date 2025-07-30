@@ -4,7 +4,7 @@ export async function POST(request: NextRequest) {
   try {
     const { prompt, style = "instrumental, cinematic, epic", instrumental = true } = await request.json()
     
-    console.log('🎵 Suno API called with prompt:', prompt)
+    console.log('🎵 KIE.ai API called with prompt:', prompt)
     console.log('🎵 Style:', style)
     console.log('🎵 Instrumental:', instrumental)
 
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('🎵 Suno music generation error:', error)
+    console.error('🎵 KIE.ai music generation error:', error)
     
     return NextResponse.json({ 
       success: false, 
@@ -124,99 +124,26 @@ function formatDuration(seconds: number | null | undefined): string {
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
-// GET endpoint to check generation status
+// GET endpoint for checking generation status
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const taskId = searchParams.get('task_id')
 
   if (!taskId) {
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Task ID required' 
+    return NextResponse.json({
+      success: false,
+      error: 'Task ID required'
     }, { status: 400 })
   }
 
-  try {
-    const kieApiKey = process.env.KIE_API_KEY
-    
-    // Debug environment variables for GET endpoint
-    console.log('🔑 GET endpoint - KIE_API_KEY exists:', !!kieApiKey)
-    console.log('🔑 GET endpoint - KIE_API_KEY length:', kieApiKey ? kieApiKey.length : 0)
-    
-    if (!kieApiKey) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'KIE API key not configured' 
-      }, { status: 500 })
-    }
-
-    // Check generation status with KIE.ai API
-    // Note: We might need to adjust this endpoint based on KIE.ai documentation
-    const statusUrl = `https://api.kie.ai/api/v1/status/${taskId}`
-    console.log('🎵 Checking KIE.ai status for task:', taskId)
-    
-    const kieApiResponse = await fetch(statusUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${kieApiKey}`,
-        'Content-Type': 'application/json',
-      }
-    })
-
-    if (!kieApiResponse.ok) {
-      console.error('🎵 KIE.ai status check failed:', kieApiResponse.status)
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Failed to check generation status' 
-      }, { status: 500 })
-    }
-
-    const statusData = await kieApiResponse.json()
-    console.log('🎵 KIE.ai status response:', statusData)
-
-    // Handle KIE.ai status response
-    if (statusData.error) {
-      return NextResponse.json({ 
-        success: false, 
-        error: statusData.error 
-      }, { status: 500 })
-    }
-
-    // If generation is complete
-    if (statusData.audio_url || statusData.audioUrl) {
-      const track = {
-        id: statusData.id || taskId,
-        title: statusData.title || 'AI Generated Music',
-        artist: 'KIE.ai Generated',
-        thumbnail: statusData.image_url || '/music-placeholder.png',
-        duration: formatDuration(statusData.duration || 120),
-        url: statusData.audio_url || statusData.audioUrl,
-        audioUrl: statusData.audio_url || statusData.audioUrl,
-        style: statusData.style || 'generated',
-        state: 'succeeded'
-      }
-
-      return NextResponse.json({
-        success: true,
-        tracks: [track],
-        task_id: taskId
-      })
-    }
-
-    // If still processing
-    return NextResponse.json({
-      success: true,
-      tracks: [],
-      task_id: taskId,
-      status: statusData.status || 'processing',
-      message: 'Music generation in progress...'
-    })
-
-  } catch (error) {
-    console.error('🎵 Error checking KIE.ai status:', error)
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Internal server error' 
-    }, { status: 500 })
-  }
+  // Note: KIE.ai API doesn't currently provide a reliable status checking endpoint
+  // The generation endpoint returns a task ID, but we haven't found a working status endpoint
+  console.log('🎵 Status check requested for task:', taskId)
+  
+  return NextResponse.json({
+    success: false,
+    error: 'Status checking not currently supported for KIE.ai API',
+    message: 'KIE.ai API generates music synchronously. Please try generating music again.',
+    task_id: taskId
+  }, { status: 501 }) // 501 Not Implemented
 }

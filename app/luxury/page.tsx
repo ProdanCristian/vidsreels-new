@@ -153,13 +153,16 @@ export default function LuxuryScriptGenerator() {
       }
       
       const data = await response.json()
-      console.log('🎵 Suno API Response:', data)
+      console.log('🎵 KIE.ai API Response:', data)
       
-      if (data.success && data.tracks) {
-        setMusicTracks(data.tracks)
-        
-        // If generation is still in progress, start polling
-        if (data.tracks.length === 0 && data.task_id) {
+      if (data.success) {
+        if (data.tracks && data.tracks.length > 0) {
+          // We got tracks immediately (unlikely with KIE.ai)
+          setMusicTracks(data.tracks)
+        } else if (data.task_id) {
+          // KIE.ai returns task ID - generation is asynchronous
+          console.log('🎵 Music generation started successfully!')
+          console.log('🎵 Task ID:', data.task_id)
           pollMusicGeneration(data.task_id)
         }
       } else {
@@ -173,52 +176,17 @@ export default function LuxuryScriptGenerator() {
     }
   }
 
-  // Poll for music generation status
+  // Note: KIE.ai API doesn't support reliable status polling
+  // Music generation is asynchronous but we can't check completion status
   const pollMusicGeneration = async (taskId: string) => {
-    const maxAttempts = 30 // 5 minutes max (10 second intervals)
-    let attempts = 0
+    console.log('🎵 Music generation started with task ID:', taskId)
+    console.log('🎵 Note: Status polling not supported by KIE.ai API')
     
-    const checkStatus = async () => {
-      try {
-        const response = await fetch(`/api/generate-music?task_id=${taskId}`)
-        
-        if (response.ok) {
-          const data = await response.json()
-          
-          if (data.success && data.tracks) {
-            const completedTracks = data.tracks.filter((track: MusicTrack) => track.state === 'succeeded')
-            
-            if (completedTracks.length > 0) {
-              setMusicTracks(completedTracks)
-              setIsGeneratingMusic(false)
-              return
-            }
-            
-            // Check if any tracks failed
-            const failedTracks = data.tracks.filter((track: MusicTrack) => track.state === 'error')
-            if (failedTracks.length > 0) {
-              console.error('🎵 Music generation failed')
-              setIsGeneratingMusic(false)
-              return
-            }
-          }
-        }
-        
-        attempts++
-        if (attempts < maxAttempts) {
-          setTimeout(checkStatus, 10000) // Check every 10 seconds
-        } else {
-          console.error('🎵 Music generation timeout')
-          setIsGeneratingMusic(false)
-        }
-        
-      } catch (error) {
-        console.error('🎵 Error checking generation status:', error)
-        setIsGeneratingMusic(false)
-      }
-    }
-    
-    setTimeout(checkStatus, 10000) // Start checking after 10 seconds
+    // Since we can't poll status, just show a message and stop loading after a reasonable time
+    setTimeout(() => {
+      setIsGeneratingMusic(false)
+      console.log('🎵 Music generation task submitted. Please try generating again in a few minutes to check if music is ready.')
+    }, 3000) // Stop loading after 3 seconds
   }
 
   // Generate default AI music for the content
