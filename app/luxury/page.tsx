@@ -1453,7 +1453,7 @@ Return ONLY the optimized script, ready for voice generation.`
                 <span>Generate AI Background Music</span>
               </h3>
               <p className="text-white/60 text-sm mt-2">
-                Generate custom AI music that perfectly fits your content using Suno AI
+                Generate custom AI music that perfectly fits your content
               </p>
             </div>
             <div className="px-6 pb-6">
@@ -1508,24 +1508,6 @@ Return ONLY the optimized script, ready for voice generation.`
                   </div>
                 )}
               </Button>
-              
-              {/* Quick Generation Buttons */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {[
-                  { label: 'Epic Motivation', prompt: 'Epic cinematic background music for motivational content', style: 'instrumental, cinematic, epic, motivational' },
-                  { label: 'Success Anthem', prompt: 'Powerful anthem music for success and achievement', style: 'instrumental, orchestral, triumphant' },
-                  { label: 'Focus Flow', prompt: 'Calm ambient music for focus and concentration', style: 'instrumental, ambient, peaceful' }
-                ].map((preset) => (
-                  <Button
-                    key={preset.label}
-                    onClick={() => generateMusic(preset.prompt, preset.style)}
-                    disabled={isGeneratingMusic}
-                    className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white/70 hover:text-white text-xs px-3 py-2 h-auto rounded-lg font-normal"
-                  >
-                    {preset.label}
-                  </Button>
-                ))}
-              </div>
             </div>
 
             {/* Hidden Audio Player for AI-generated music */}
