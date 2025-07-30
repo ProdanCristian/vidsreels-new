@@ -42,74 +42,90 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // TODO: Replace with actual KIE.ai API endpoint
-    // The current endpoint is for ACE Data Cloud, not KIE.ai
-    // We need the real KIE.ai music generation endpoint
-    console.log('🎵 Using KIE.ai API for music generation...')
-    
-    // PLACEHOLDER: This needs to be replaced with the actual KIE.ai endpoint
-    // Current endpoint is incorrect - this is ACE Data Cloud, not KIE.ai
-    const kieApiResponse = await fetch('https://api.acedata.cloud/suno/audios', {
-      method: 'POST',
+    // TODO: Configure these values for the actual KIE.ai API
+    const API_CONFIG = {
+      // PLACEHOLDER: Update with actual KIE.ai API endpoint
+      endpoint: 'https://api.acedata.cloud/suno/audios', // This is WRONG - needs actual KIE.ai endpoint
       headers: {
         'Authorization': `Bearer ${kieApiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        // TODO: Update request body format for KIE.ai API
+      // PLACEHOLDER: Update request body format for KIE.ai
+      requestBody: {
         action: 'generate',
         prompt: prompt,
         style: style,
         instrumental: instrumental,
         model: 'chirp-v4'
-      }),
-    })
-
-    if (!kieApiResponse.ok) {
-      console.error('🎵 Suno API error:', kieApiResponse.status, kieApiResponse.statusText)
-      const errorText = await kieApiResponse.text()
-      console.error('🎵 Suno API error details:', errorText)
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Failed to generate music' 
-      }, { status: 500 })
+      }
     }
 
-    const sunoData: SunoResponse = await kieApiResponse.json()
-    console.log('🎵 Suno API response:', sunoData)
-
-    if (!sunoData.success || !sunoData.data) {
-      console.error('🎵 Suno API returned unsuccessful response')
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Music generation failed' 
-      }, { status: 500 })
-    }
-
-    // Transform Suno response to match our interface
-    const tracks = sunoData.data.map((track: SunoTrack) => ({
-      id: track.id,
-      title: track.title || 'AI Generated Music',
-      artist: 'AI Generated',
-      thumbnail: track.image_url || '/music-placeholder.png',
-      duration: formatDuration(track.duration),
-      url: track.audio_url,
-      audioUrl: track.audio_url, // Direct audio URL instead of YouTube
-      style: track.style,
-      lyric: track.lyric,
-      state: track.state
-    }))
-
-    // Filter for completed tracks only
-    const completedTracks = tracks.filter(track => track.state === 'succeeded')
-
-    console.log('🎵 Returning Suno generated tracks:', completedTracks.length)
+    console.log('🎵 Making API call to:', API_CONFIG.endpoint)
+    console.log('🎵 Request body:', JSON.stringify(API_CONFIG.requestBody, null, 2))
     
-    return NextResponse.json({ 
-      success: true,
-      tracks: completedTracks,
-      task_id: sunoData.task_id
-    })
+    try {
+      const apiResponse = await fetch(API_CONFIG.endpoint, {
+        method: 'POST',
+        headers: API_CONFIG.headers,
+        body: JSON.stringify(API_CONFIG.requestBody),
+      })
+
+      if (!apiResponse.ok) {
+        console.error('🎵 API error:', apiResponse.status, apiResponse.statusText)
+        const errorText = await apiResponse.text()
+        console.error('🎵 API error details:', errorText)
+        return NextResponse.json({ 
+          success: false, 
+          error: `API call failed: ${apiResponse.status} ${apiResponse.statusText}`,
+          details: errorText
+        }, { status: 500 })
+      }
+
+      const apiData = await apiResponse.json()
+      console.log('🎵 API response received:', apiData)
+
+      // TODO: Update response parsing for KIE.ai API format
+      if (!apiData.success || !apiData.data) {
+        console.error('🎵 API returned unsuccessful response')
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Music generation failed',
+          apiResponse: apiData
+        }, { status: 500 })
+      }
+
+      // TODO: Update track transformation for KIE.ai response format
+      const tracks = apiData.data.map((track: any) => ({
+        id: track.id,
+        title: track.title || 'AI Generated Music',
+        artist: 'AI Generated',
+        thumbnail: track.image_url || '/music-placeholder.png',
+        duration: formatDuration(track.duration),
+        url: track.audio_url,
+        audioUrl: track.audio_url,
+        style: track.style,
+        lyric: track.lyric,
+        state: track.state
+      }))
+
+      const completedTracks = tracks.filter((track: any) => track.state === 'succeeded')
+
+      console.log('🎵 Returning generated tracks:', completedTracks.length)
+
+      return NextResponse.json({
+        success: true,
+        tracks: completedTracks,
+        task_id: apiData.task_id
+      })
+
+    } catch (error) {
+      console.error('🎵 Network/API error:', error)
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Network error or API unavailable',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 })
+    }
 
   } catch (error) {
     console.error('🎵 Suno music generation error:', error)
