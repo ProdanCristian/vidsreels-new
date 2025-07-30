@@ -76,6 +76,8 @@ export default function LuxuryScriptGenerator() {
   const [isSeeking, setIsSeeking] = useState(false)
   const [isPlayerReady, setIsPlayerReady] = useState(false)
   const [shouldAutoPlay, setShouldAutoPlay] = useState(false) // Track if we should auto-play when ready
+  const [isMobile, setIsMobile] = useState(false) // Detect mobile devices
+  const [pendingPlay, setPendingPlay] = useState(false) // Track pending play action
   
   // Progress tracking
   const [currentStep, setCurrentStep] = useState(0) // 0: person, 1: script, 2: voice, 3: music
@@ -100,10 +102,34 @@ export default function LuxuryScriptGenerator() {
     setTimeout(() => setShowScrollHint(false), 3000)
   }
 
-  // Auto-play effect - backup mechanism for when onReady doesn't trigger auto-play
+  // Mobile detection
   useEffect(() => {
+    const checkMobile = () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                           window.innerWidth <= 768 ||
+                           ('ontouchstart' in window)
+      setIsMobile(isMobileDevice)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  // Auto-play effect - disabled on mobile due to browser restrictions
+  useEffect(() => {
+    // Skip auto-play on mobile devices due to browser restrictions
+    if (isMobile) {
+      console.log('🎵 Auto-play disabled on mobile device')
+      if (shouldAutoPlay) {
+        setShouldAutoPlay(false)
+        setPendingPlay(true) // Mark that user wanted to play
+      }
+      return
+    }
+
     if (isPlayerReady && shouldAutoPlay && playerInstance && !isPlaying) {
-      console.log('🎵 Backup auto-play triggered - player ready and auto-play requested')
+      console.log('🎵 Auto-play triggered for desktop - player ready and auto-play requested')
       
       // Small delay to ensure everything is ready
       setTimeout(() => {
@@ -112,16 +138,33 @@ export default function LuxuryScriptGenerator() {
             playerInstance.playVideo()
             setIsPlaying(true)
             setShouldAutoPlay(false) // Reset flag after successful play
-            console.log('🎵 Backup auto-play command sent')
+            setPendingPlay(false) // Clear pending play
+            console.log('🎵 Auto-play command sent successfully')
           } else {
-            console.log('🎵 Backup auto-play failed - player reference invalid')
+            console.log('🎵 Auto-play failed - player reference invalid')
           }
         } catch (error) {
-          console.log('🎵 Backup auto-play failed:', error)
+          console.log('🎵 Auto-play failed:', error)
         }
       }, 200)
     }
-  }, [isPlayerReady, shouldAutoPlay, isPlaying, playerInstance])
+  }, [isPlayerReady, shouldAutoPlay, isPlaying, playerInstance, isMobile])
+
+  // Handle pending play actions on mobile when player becomes ready
+  useEffect(() => {
+    if (isMobile && isPlayerReady && pendingPlay && playerInstance && !isPlaying) {
+      console.log('🎵 Mobile: Player ready, executing pending play action')
+      try {
+        playerInstance.playVideo()
+        setIsPlaying(true)
+        setPendingPlay(false)
+        console.log('🎵 Mobile: Pending play executed successfully')
+      } catch (error) {
+        console.log('🎵 Mobile: Pending play failed:', error)
+        setPendingPlay(false)
+      }
+    }
+  }, [isMobile, isPlayerReady, pendingPlay, playerInstance, isPlaying])
 
   // Update timeline progress
   useEffect(() => {
@@ -270,32 +313,39 @@ export default function LuxuryScriptGenerator() {
     setPlayerInstance(player)
     setIsPlayerReady(true)
     
-    // Auto-play if requested
-    if (shouldAutoPlay && selectedTrack) {
+    // Only auto-play on desktop devices
+    if (!isMobile && shouldAutoPlay && selectedTrack) {
       setTimeout(() => {
         try {
           player.playVideo()
           setIsPlaying(true)
           setShouldAutoPlay(false) // Reset flag immediately
-          console.log('🎵 Auto-play successful')
+          setPendingPlay(false) // Clear pending play
+          console.log('🎵 Auto-play successful on desktop')
         } catch (error) {
           console.log('🎵 Auto-play failed in ready handler:', error)
         }
-      }, 300) // Slightly longer delay for more reliable auto-play
+      }, 300)
+    } else if (isMobile && shouldAutoPlay) {
+      // On mobile, just mark as ready for manual play
+      console.log('🎵 Player ready on mobile - waiting for user interaction')
+      setShouldAutoPlay(false)
+      setPendingPlay(true)
     }
   }
 
-  // Simplified play function
+  // Simplified play function - mobile optimized
   const handlePlayMusic = () => {
     if (!selectedTrack || !playingVideoId) {
       console.log('🎵 No track selected')
       return
     }
 
-    console.log('🎵 Attempting to play:', selectedTrack.title)
+    console.log('🎵 Attempting to play:', selectedTrack.title, 'Mobile:', isMobile)
     
-    // Always reset auto-play flag when user manually clicks play
+    // Clear all flags since this is a direct user action
     setShouldAutoPlay(false)
+    setPendingPlay(false)
     
     if (playerInstance && isPlayerReady) {
       try {
@@ -304,24 +354,33 @@ export default function LuxuryScriptGenerator() {
           setIsPlaying(false)
           console.log('🎵 Paused music')
         } else {
+          // Direct user interaction - this should work on mobile
           playerInstance.playVideo()
           setIsPlaying(true)
-          console.log('🎵 Started playing music')
+          console.log('🎵 Started playing music via direct user interaction')
         }
       } catch (error) {
         console.log('🎵 Player method failed:', error)
-        // Set auto-play flag only if player failed
-        setShouldAutoPlay(true)
+        // On mobile, don't try auto-play fallback
+        if (!isMobile) {
+          setShouldAutoPlay(true)
+        }
       }
     } else {
       console.log('🎵 Player not ready, will attempt when ready')
-      setShouldAutoPlay(true)
+      // On mobile, mark as pending for manual execution when ready
+      if (isMobile) {
+        setPendingPlay(true)
+        console.log('🎵 Mobile: Marked play as pending until player is ready')
+      } else {
+        setShouldAutoPlay(true)
+      }
     }
   }
 
-  // Simplified track selection
+  // Simplified track selection - mobile optimized
   const playTrack = (track: MusicTrack) => {
-    console.log('🎵 Selecting new track:', track.title)
+    console.log('🎵 Selecting new track:', track.title, 'Mobile:', isMobile)
     
     const videoId = extractVideoId(track.url)
     if (!videoId) {
@@ -337,7 +396,16 @@ export default function LuxuryScriptGenerator() {
 
     setSelectedTrack(track)
     setIsPlaying(false)
-    setShouldAutoPlay(true)
+    
+    // On mobile, don't auto-play, wait for explicit user action
+    if (isMobile) {
+      console.log('🎵 Mobile device - track selected, waiting for play button click')
+      setShouldAutoPlay(false)
+      setPendingPlay(false) // User will need to click play explicitly
+    } else {
+      setShouldAutoPlay(true) // Desktop can auto-play
+      setPendingPlay(false)
+    }
     
     // Reset timeline for new track
     setCurrentTime(0)
@@ -349,7 +417,7 @@ export default function LuxuryScriptGenerator() {
     if (playingVideoId !== videoId || !playerInstance) {
       setPlayingVideoId(videoId)
       setPlayerKey(prev => prev + 1)
-      console.log('🎵 Creating new player for different video:', track.title)
+      console.log('🎵 Creating new player for video:', track.title)
     } else {
       console.log('🎵 Using existing player for track:', track.title)
     }
@@ -1553,6 +1621,17 @@ Return ONLY the optimized script, ready for voice generation.`
               <p className="text-white/60 text-sm mt-2">
                 Search and play background music for your content
               </p>
+              {/* Mobile usage hint */}
+              {isMobile && selectedTrack && !isPlaying && (
+                <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <p className="text-blue-300 text-sm flex items-start gap-2">
+                    <span className="text-lg">📱</span>
+                    <span>
+                      Track selected! Click the <strong>PLAY</strong> button below to start playing music.
+                    </span>
+                  </p>
+                </div>
+              )}
             </div>
             <div className="px-6 pb-6">
 
@@ -1618,7 +1697,7 @@ Return ONLY the optimized script, ready for voice generation.`
                     height: '1',
                     playerVars: {
                       // Optimized for mobile and faster loading
-                      autoplay: 0, // Required for mobile
+                      autoplay: isMobile ? 0 : 0, // Always 0 for manual control
                       enablejsapi: 1,
                       controls: 0, // Hide controls for faster loading
                       disablekb: 1, // Disable keyboard for faster loading
@@ -1627,6 +1706,8 @@ Return ONLY the optimized script, ready for voice generation.`
                       rel: 0, // Don't show related videos
                       fs: 0, // Disable fullscreen
                       playsinline: 1, // Play inline on mobile
+                      origin: typeof window !== 'undefined' ? window.location.origin : '',
+                      widget_referrer: typeof window !== 'undefined' ? window.location.origin : '',
                     },
                   }}
                   onReady={handlePlayerReady}
@@ -1634,15 +1715,18 @@ Return ONLY the optimized script, ready for voice generation.`
                     console.log('🎵 YouTube Music player started playing')
                     setIsPlaying(true)
                     setShouldAutoPlay(false) // Reset auto-play flag when playing starts
+                    setPendingPlay(false) // Clear pending play flag when playing starts
                   }}
                   onPause={() => {
                     console.log('🎵 YouTube Music player paused')
                     setIsPlaying(false)
+                    setPendingPlay(false) // Clear pending play flag when paused
                   }}
                   onEnd={() => {
                     console.log('🎵 YouTube Music player ended')
                     setIsPlaying(false)
                     setShouldAutoPlay(false) // Reset auto-play flag
+                    setPendingPlay(false) // Clear pending play flag
                   }}
                   onError={(error) => {
                     const playerError = error as YouTubePlayerError;
@@ -1658,6 +1742,7 @@ Return ONLY the optimized script, ready for voice generation.`
                     setIsPlaying(false)
                     setIsPlayerReady(false)
                     setShouldAutoPlay(false) // Cancel auto-play on error
+                    setPendingPlay(false) // Clear pending play flag on error
                   }}
                 />
               </div>
@@ -1692,8 +1777,11 @@ Return ONLY the optimized script, ready for voice generation.`
                         if (selectedTrack?.id === track.id) {
                           handlePlayMusic() // Use consistent play/pause logic
                         } else {
-                          // Select new track (will auto-play when ready)
+                          // Select new track
                           playTrack(track)
+                          // On mobile, just select the track - user will need to click play button
+                          // On desktop, this will auto-play
+                          console.log(`🎵 Track selection: ${track.title} - Mobile: ${isMobile ? 'selected, click PLAY to start' : 'will auto-play'}`)
                         }
                       }}
                       className={`p-3 sm:p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
@@ -1756,10 +1844,10 @@ Return ONLY the optimized script, ready for voice generation.`
                                 // Use consistent play/pause logic
                                 handlePlayMusic()
                               }}
-                              className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
+                              className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] touch-manipulation ${
                                 playingVideoId && isPlaying
-                                  ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
-                                  : 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
+                                  ? 'bg-green-500/30 hover:bg-green-500/40 active:bg-green-500/50 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
+                                  : 'bg-blue-500/30 hover:bg-blue-500/40 active:bg-blue-500/50 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
                               }`}
                             >
                               {playingVideoId && isPlaying ? (
@@ -1769,16 +1857,21 @@ Return ONLY the optimized script, ready for voice generation.`
                                 </div>
                               ) : (
                                 <div className={`flex items-center justify-center gap-1 sm:gap-2 transition-all duration-300 ${
-                                  shouldAutoPlay && playingVideoId === extractVideoId(track.url) 
+                                  (shouldAutoPlay || pendingPlay) && playingVideoId === extractVideoId(track.url) 
                                     ? 'animate-pulse' 
                                     : ''
                                 }`}>
                                   <Play className={`w-4 h-4 transition-transform duration-300 ${
-                                    shouldAutoPlay && playingVideoId === extractVideoId(track.url)
+                                    (shouldAutoPlay || pendingPlay) && playingVideoId === extractVideoId(track.url)
                                       ? 'animate-pulse scale-110'
                                       : ''
                                   }`} />
-                                  <span className="font-semibold">PLAY</span>
+                                  <span className="font-semibold">
+                                    {(shouldAutoPlay || pendingPlay) && playingVideoId === extractVideoId(track.url) && !isPlayerReady
+                                      ? 'LOADING...'
+                                      : 'PLAY'
+                                    }
+                                  </span>
                                 </div>
                               )}
                             </Button>
@@ -1791,10 +1884,10 @@ Return ONLY the optimized script, ready for voice generation.`
                                 e.stopPropagation()
                                 playTrack(track)
                               }}
-                              className="text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] bg-white/10 hover:bg-white/20 border border-white/30 text-white/90 hover:text-white hover:border-white/50"
+                              className="text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] bg-white/10 hover:bg-white/20 active:bg-white/30 border border-white/30 text-white/90 hover:text-white hover:border-white/50 touch-manipulation"
                             >
                               <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                <span className="font-semibold">SELECT</span>
+                                <span className="font-semibold">{isMobile ? 'SELECT' : 'SELECT'}</span>
                               </div>
                             </Button>
                           </div>
