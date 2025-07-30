@@ -25,12 +25,12 @@ export async function POST(request: NextRequest) {
     console.log('🎵 Style:', style)
     console.log('🎵 Instrumental:', instrumental)
 
-    const sunoApiKey = process.env.SUNO_API_KEY
-    if (!sunoApiKey) {
-      console.error('🎵 SUNO_API_KEY not found in environment variables')
+    const kieApiKey = process.env.KIE_API_KEY
+    if (!kieApiKey) {
+      console.error('🎵 KIE_API_KEY not found in environment variables')
       return NextResponse.json({ 
         success: false, 
-        error: 'Suno API key not configured' 
+        error: 'KIE API key not configured' 
       }, { status: 500 })
     }
 
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const sunoResponse = await fetch('https://api.acedata.cloud/suno/audios', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${sunoApiKey}`,
+        'Authorization': `Bearer ${kieApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -127,11 +127,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const sunoApiKey = process.env.SUNO_API_KEY
-    if (!sunoApiKey) {
+    const kieApiKey = process.env.KIE_API_KEY
+    if (!kieApiKey) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Suno API key not configured' 
+        error: 'KIE API key not configured' 
       }, { status: 500 })
     }
 
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
     const sunoResponse = await fetch(`https://api.acedata.cloud/suno/audios?task_id=${taskId}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${sunoApiKey}`,
+        'Authorization': `Bearer ${kieApiKey}`,
         'Content-Type': 'application/json',
       }
     })

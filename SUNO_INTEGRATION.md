@@ -15,14 +15,14 @@ This project has been updated to use Suno AI for music generation instead of the
 
 ### 1. Environment Variables
 
-Add your Suno API key to your `.env.local` file:
+Add your KIE API key to your `.env.local` file:
 
 ```bash
-SUNO_API_KEY=your_suno_api_key_here
+KIE_API_KEY=your_kie_api_key_here
 ```
 
-To get a Suno API key:
-1. Visit [AceData Cloud](https://api.acedata.cloud/suno/audios)
+To get a KIE API key:
+1. Visit [KIE.ai](https://docs.kie.ai/suno-api/generate-music)
 2. Sign up for an account
 3. Get your API key from the dashboard
 
@@ -148,7 +148,7 @@ if (data.task_id) {
 
 ### Common Issues
 
-1. **API Key Missing**: Ensure `SUNO_API_KEY` is set in your environment
+1. **API Key Missing**: Ensure `KIE_API_KEY` is set in your environment
 2. **Generation Timeout**: Music generation can take 1-2 minutes, be patient
 3. **Audio Not Playing**: Check browser audio permissions and HTTPS
 
