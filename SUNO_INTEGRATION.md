@@ -1,6 +1,6 @@
-# Suno AI Music Generation Integration
+# KIE.ai Suno Music Generation Integration
 
-This project has been updated to use Suno AI for music generation instead of the previous YouTube Music API integration. The luxury page now generates custom AI music that perfectly fits your content.
+This project has been updated to use KIE.ai's Suno API for music generation instead of the previous YouTube Music API integration. The luxury page now generates custom AI music that perfectly fits your content.
 
 ## Features
 

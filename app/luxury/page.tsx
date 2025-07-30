@@ -61,10 +61,8 @@ export default function LuxuryScriptGenerator() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [musicPrompt, setMusicPrompt] = useState('')
   const [musicStyle, setMusicStyle] = useState('instrumental, cinematic, epic')
-  const [generationTaskId, setGenerationTaskId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [trackDuration, setTrackDuration] = useState(0)
-  const [musicProgress, setMusicProgress] = useState(0)
   
   // Progress tracking
   const [currentStep, setCurrentStep] = useState(0) // 0: person, 1: script, 2: voice, 3: music
@@ -97,7 +95,6 @@ export default function LuxuryScriptGenerator() {
         if (audio) {
           setCurrentTime(audio.currentTime)
           setTrackDuration(audio.duration || 0)
-          setMusicProgress((audio.currentTime / (audio.duration || 1)) * 100)
         }
       }, 250)
     }
@@ -159,7 +156,6 @@ export default function LuxuryScriptGenerator() {
       
       if (data.success && data.tracks) {
         setMusicTracks(data.tracks)
-        setGenerationTaskId(data.task_id)
         
         // If generation is still in progress, start polling
         if (data.tracks.length === 0 && data.task_id) {
@@ -288,7 +284,6 @@ export default function LuxuryScriptGenerator() {
     setIsPlaying(false)
     setCurrentTime(0)
     setTrackDuration(0)
-    setMusicProgress(0)
     
     console.log('🎵 Track selected:', track.title)
   }
@@ -400,7 +395,7 @@ export default function LuxuryScriptGenerator() {
 
 FISH AUDIO VOICE TAGS:
 🎭 Use emotion tags at sentence start: (excited), (confident), (serious)
-🗣️ Add natural speech elements: "um", "uh", (break), (breath)
+🗣️ Add natural speech elements: &quot;um&quot;, &quot;uh&quot;, (break), (breath)
 📝 Keep tags minimal and natural - avoid overuse
 
 CRITICAL REQUIREMENTS:
@@ -409,7 +404,7 @@ CRITICAL REQUIREMENTS:
 - Include ${person.name}'s signature phrases and speaking patterns
 - Use Fish Audio tags SPARINGLY - only 2-3 emotion tags per script
 - Place emotion tags at sentence beginnings: (excited)This is incredible!
-- Add natural pauses with (break) or "um" occasionally
+- Add natural pauses with (break) or &quot;um&quot; occasionally
 - Focus on motivation, success, and personal growth
 - Make it powerful and inspiring
 
@@ -1574,12 +1569,11 @@ Return ONLY the optimized script, ready for voice generation.`
                     setTrackDuration(musicAudioRef.current.duration)
                   }
                 }}
-                onTimeUpdate={() => {
-                  if (musicAudioRef.current) {
-                    setCurrentTime(musicAudioRef.current.currentTime)
-                    setMusicProgress((musicAudioRef.current.currentTime / (musicAudioRef.current.duration || 1)) * 100)
-                  }
-                }}
+                                 onTimeUpdate={() => {
+                   if (musicAudioRef.current) {
+                     setCurrentTime(musicAudioRef.current.currentTime)
+                   }
+                 }}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 onEnded={() => setIsPlaying(false)}
@@ -1607,7 +1601,7 @@ Return ONLY the optimized script, ready for voice generation.`
                     <div
                       key={track.id}
                       onClick={(e) => {
-                        // Don't trigger if clicking on the play button
+                        // Don&apos;t trigger if clicking on the play button
                         if ((e.target as HTMLElement).closest('button')) {
                           return
                         }
@@ -1750,7 +1744,7 @@ Return ONLY the optimized script, ready for voice generation.`
                 <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
                   <Music className="w-8 h-8 text-white/30" />
                 </div>
-                <p className="text-white/50 mb-4">No AI music generated yet. Click "Generate AI Music" above to create custom background music.</p>
+                <p className="text-white/50 mb-4">No AI music generated yet. Click &quot;Generate AI Music&quot; above to create custom background music.</p>
                 <Button
                   onClick={() => generateDefaultMusic()}
                   className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 py-2 rounded-lg"
