@@ -1,16 +1,21 @@
 import OpenAI from 'openai'
 
-// Create AIML client function that checks environment at runtime
-function createAIMLClient() {
-  const apiKey = process.env.AIML_API_KEY
-  if (!apiKey) {
-    throw new Error('AIML_API_KEY is not set in the environment variables.')
-  }
+// Lazily create AIML client to avoid build-time environment variable access
+let aimlClient: OpenAI | null = null
 
-  return new OpenAI({
-    apiKey: apiKey,
-    baseURL: 'https://api.aimlapi.com/v1',
-  })
+function getAIMLClient() {
+  if (!aimlClient) {
+    const apiKey = process.env.AIML_API_KEY
+    if (!apiKey) {
+      throw new Error('AIML_API_KEY is not set in the environment variables.')
+    }
+
+    aimlClient = new OpenAI({
+      apiKey: apiKey,
+      baseURL: 'https://api.aimlapi.com/v1',
+    })
+  }
+  return aimlClient
 }
 
 // Helper function to generate scripts with streaming
@@ -23,7 +28,7 @@ export async function generateScriptStream(prompt: string) {
     console.log('Call timestamp:', new Date().toISOString())
     console.log('=== AIML API PARAMETERS ===')
     
-    const aiml = createAIMLClient()
+    const aiml = getAIMLClient()
     const stream = await aiml.chat.completions.create({
       model: 'google/gemini-2.5-flash-lite-preview',
       messages: [
@@ -53,7 +58,7 @@ export async function generateScriptStream(prompt: string) {
 // Helper function for non-streaming generation
 export async function generateScript(prompt: string) {
   try {
-    const aiml = createAIMLClient()
+    const aiml = getAIMLClient()
     const response = await aiml.chat.completions.create({
       model: 'google/gemini-2.5-flash-lite-preview',
       messages: [
