@@ -6,9 +6,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog'
 import DashboardHeader from '@/components/dashboard-header'
-import { Crown, Sparkles, Volume2, Mic, Check, Music, Play, Pause, Search, Edit3, Save, X } from 'lucide-react'
+import { Crown, Sparkles, Volume2, Mic, Check, Music, Play, Pause, Edit3, Save, X } from 'lucide-react'
 import Image from 'next/image'
-import YouTube from 'react-youtube'
 
 interface FamousPerson {
   id: string
@@ -28,20 +27,12 @@ interface MusicTrack {
   thumbnail: string
   duration: string
   url: string
+  audioUrl?: string // Direct audio URL for AI-generated music
+  style?: string
+  state?: string
 }
 
-interface YoutubePlayer {
-  getCurrentTime: () => number;
-  getDuration: () => number;
-  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
-  stopVideo: () => void;
-  playVideo: () => void;
-  pauseVideo: () => void;
-}
 
-interface YouTubePlayerError {
-  data: number;
-}
 
 export default function LuxuryScriptGenerator() {
   // Core states
@@ -63,28 +54,24 @@ export default function LuxuryScriptGenerator() {
   const [temperature, setTemperature] = useState(0.9) // Voice creativity
   const [topP, setTopP] = useState(0.9) // Voice diversity
 
-  // Music recommendation states
+  // Music generation states
   const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([])
-  const [isLoadingMusic, setIsLoadingMusic] = useState(false)
+  const [isGeneratingMusic, setIsGeneratingMusic] = useState(false)
   const [selectedTrack, setSelectedTrack] = useState<MusicTrack | null>(null)
-  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [playerKey, setPlayerKey] = useState(0)
+  const [musicPrompt, setMusicPrompt] = useState('')
+  const [musicStyle, setMusicStyle] = useState('instrumental, cinematic, epic')
+  const [generationTaskId, setGenerationTaskId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(0)
   const [trackDuration, setTrackDuration] = useState(0)
-  const [isSeeking, setIsSeeking] = useState(false)
-  const [isPlayerReady, setIsPlayerReady] = useState(false)
-  const [shouldAutoPlay, setShouldAutoPlay] = useState(false) // Track if we should auto-play when ready
+  const [musicProgress, setMusicProgress] = useState(0)
   
   // Progress tracking
   const [currentStep, setCurrentStep] = useState(0) // 0: person, 1: script, 2: voice, 3: music
   const [showScrollHint, setShowScrollHint] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement>(null)
-  
-  // YouTube player management - simplified approach
-  const [playerInstance, setPlayerInstance] = useState<YoutubePlayer | null>(null)
+  const musicAudioRef = useRef<HTMLAudioElement>(null)
   
   // Section refs for auto-scroll
   const personSectionRef = useRef<HTMLDivElement>(null)
@@ -100,49 +87,17 @@ export default function LuxuryScriptGenerator() {
     setTimeout(() => setShowScrollHint(false), 3000)
   }
 
-  // Auto-play effect - backup mechanism for when onReady doesn't trigger auto-play
-  useEffect(() => {
-    if (isPlayerReady && shouldAutoPlay && playerInstance && !isPlaying) {
-      console.log('🎵 Backup auto-play triggered - player ready and auto-play requested')
-      
-      // Small delay to ensure everything is ready
-      setTimeout(() => {
-        try {
-          if (playerInstance && typeof playerInstance.playVideo === 'function') {
-            playerInstance.playVideo()
-            setIsPlaying(true)
-            setShouldAutoPlay(false) // Reset flag after successful play
-            console.log('🎵 Backup auto-play command sent')
-          } else {
-            console.log('🎵 Backup auto-play failed - player reference invalid')
-          }
-        } catch (error) {
-          console.log('🎵 Backup auto-play failed:', error)
-        }
-      }, 200)
-    }
-  }, [isPlayerReady, shouldAutoPlay, isPlaying, playerInstance])
-
-  // Update timeline progress
+  // Update music progress for AI-generated tracks
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
 
-    if (isPlaying && !isSeeking && playerInstance) {
+    if (isPlaying && selectedTrack?.audioUrl && musicAudioRef.current) {
       interval = setInterval(() => {
-        try {
-          if (playerInstance && !isSeeking && typeof playerInstance.getCurrentTime === 'function') {
-            const current = playerInstance.getCurrentTime()
-            const total = playerInstance.getDuration()
-            
-            if (current !== undefined && current !== null && !isNaN(current)) {
-              setCurrentTime(current)
-            }
-            if (total !== undefined && total !== null && total > 0 && !isNaN(total)) {
-              setTrackDuration(total)
-            }
-          }
-        } catch (error) {
-          console.log('🎵 Error updating timeline:', error)
+        const audio = musicAudioRef.current
+        if (audio) {
+          setCurrentTime(audio.currentTime)
+          setTrackDuration(audio.duration || 0)
+          setMusicProgress((audio.currentTime / (audio.duration || 1)) * 100)
         }
       }, 250)
     }
@@ -152,7 +107,7 @@ export default function LuxuryScriptGenerator() {
         clearInterval(interval)
       }
     }
-  }, [isPlaying, playerInstance, isSeeking])
+  }, [isPlaying, selectedTrack])
 
   // Add guard clause for playerInstance in the effect
 
@@ -164,168 +119,156 @@ export default function LuxuryScriptGenerator() {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
   }
 
-  // Handle timeline seek
+  // Handle timeline seek for AI-generated music
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const seekTime = parseFloat(e.target.value)
     setCurrentTime(seekTime)
-  }
-
-  const handleSeekStart = () => {
-    setIsSeeking(true)
-  }
-
-  const handleSeekEnd = (e: React.MouseEvent<HTMLInputElement> | React.TouchEvent<HTMLInputElement>) => {
-    setIsSeeking(false)
-    const seekTime = parseFloat(e.currentTarget.value)
-        
-    if (playerInstance) {
-      try {
-        if (typeof playerInstance.seekTo === 'function') {
-          playerInstance.seekTo(seekTime, true)
-        }
-      } catch (error) {
-        console.error('🎵 Error seeking:', error)
-      }
-    }
-  }
-
-  // Extract YouTube video ID from URL (handles both YouTube and YouTube Music)
-  const extractVideoId = (url: string): string | null => {
-    if (!url || typeof url !== 'string') {
-      console.log('🎵 Invalid URL provided:', url)
-      return null
-    }
-
-    // Updated patterns to specifically handle YouTube Music URLs
-    const patterns = [
-      /(?:music\.youtube\.com\/watch\?v=)([^&\n?#]+)/, // YouTube Music - priority pattern
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/, // Regular YouTube
-      /(?:youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)/ // Embed URLs
-    ]
     
-    for (const pattern of patterns) {
-      const match = url.match(pattern)
-      if (match && match[1]) {
-        const videoId = match[1].trim()
-        // Basic validation - YouTube video IDs are typically 11 characters
-        if (videoId.length >= 10 && videoId.length <= 12) {
-          console.log('🎵 Extracted video ID:', videoId, 'from YouTube Music URL:', url)
-          return videoId
-        }
-      }
+    if (musicAudioRef.current) {
+      musicAudioRef.current.currentTime = seekTime
     }
-    
-    console.log('🎵 Could not extract valid video ID from YouTube Music URL:', url)
-    return null
   }
 
-  // Search for music
-  const searchMusic = async (query: string = 'fearless motivation instrumentals') => {
-    console.log('🎵 Starting music search for:', query)
-    setIsLoadingMusic(true)
+  // Generate AI music using Suno API
+  const generateMusic = async (prompt: string, style: string = 'instrumental, cinematic, epic') => {
+    console.log('🎵 Starting AI music generation with prompt:', prompt)
+    setIsGeneratingMusic(true)
+    setMusicTracks([])
+    
     try {
-      const response = await fetch(`/api/music-recommendations?query=${encodeURIComponent(query)}&limit=12`)
+      const response = await fetch('/api/generate-music', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: prompt,
+          style: style,
+          instrumental: true
+        })
+      })
+
       console.log('🎵 Response status:', response.status, response.ok)
       
-      if (!response.ok) throw new Error('Failed to fetch music')
+      if (!response.ok) {
+        throw new Error('Failed to generate music')
+      }
       
       const data = await response.json()
-      console.log('🎵 Music API Response:', data)
+      console.log('🎵 Suno API Response:', data)
       
-      // Transform the API response to match our interface
-      const tracks: MusicTrack[] = data.videos?.map((track: { 
-        id?: string; 
-        name?: string; 
-        url?: string; 
-        thumbnail?: string; 
-        duration?: string;
-        views?: number;
-        artist?: string;
-      }, index: number) => ({
-        id: track.id || `track-${index}`,
-        title: track.name || 'Unknown Title',
-        artist: track.artist || 'Unknown Artist',
-        thumbnail: track.thumbnail || '/video-placeholder.png',
-        duration: track.duration || '0:00',
-        url: track.url || '#'
-      })) || []
-      
-      setMusicTracks(tracks)
-    } catch (error) {
-      console.error('🎵 Error searching music:', error)
-    } finally {
-      setIsLoadingMusic(false)
-    }
-  }
-
-  // Load standard music recommendations on component mount
-  const loadStandardMusic = async () => {
-    await searchMusic('fearless motivation instrumentals')
-  }
-
-  // Enhanced onReady handler for YouTube events
-  const handlePlayerReady = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
-    console.log('🎵 YouTube player initialized successfully')
-    const player = event.target as YoutubePlayer
-    setPlayerInstance(player)
-    setIsPlayerReady(true)
-    
-    // Auto-play if requested
-    if (shouldAutoPlay && selectedTrack) {
-      setTimeout(() => {
-        try {
-          player.playVideo()
-          setIsPlaying(true)
-          setShouldAutoPlay(false) // Reset flag immediately
-          console.log('🎵 Auto-play successful')
-        } catch (error) {
-          console.log('🎵 Auto-play failed in ready handler:', error)
+      if (data.success && data.tracks) {
+        setMusicTracks(data.tracks)
+        setGenerationTaskId(data.task_id)
+        
+        // If generation is still in progress, start polling
+        if (data.tracks.length === 0 && data.task_id) {
+          pollMusicGeneration(data.task_id)
         }
-      }, 300) // Slightly longer delay for more reliable auto-play
+      } else {
+        throw new Error(data.error || 'Music generation failed')
+      }
+      
+    } catch (error) {
+      console.error('🎵 Error generating music:', error)
+    } finally {
+      setIsGeneratingMusic(false)
     }
   }
 
-  // Simplified play function
+  // Poll for music generation status
+  const pollMusicGeneration = async (taskId: string) => {
+    const maxAttempts = 30 // 5 minutes max (10 second intervals)
+    let attempts = 0
+    
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`/api/generate-music?task_id=${taskId}`)
+        
+        if (response.ok) {
+          const data = await response.json()
+          
+          if (data.success && data.tracks) {
+            const completedTracks = data.tracks.filter((track: MusicTrack) => track.state === 'succeeded')
+            
+            if (completedTracks.length > 0) {
+              setMusicTracks(completedTracks)
+              setIsGeneratingMusic(false)
+              return
+            }
+            
+            // Check if any tracks failed
+            const failedTracks = data.tracks.filter((track: MusicTrack) => track.state === 'error')
+            if (failedTracks.length > 0) {
+              console.error('🎵 Music generation failed')
+              setIsGeneratingMusic(false)
+              return
+            }
+          }
+        }
+        
+        attempts++
+        if (attempts < maxAttempts) {
+          setTimeout(checkStatus, 10000) // Check every 10 seconds
+        } else {
+          console.error('🎵 Music generation timeout')
+          setIsGeneratingMusic(false)
+        }
+        
+      } catch (error) {
+        console.error('🎵 Error checking generation status:', error)
+        setIsGeneratingMusic(false)
+      }
+    }
+    
+    setTimeout(checkStatus, 10000) // Start checking after 10 seconds
+  }
+
+  // Generate default AI music for the content
+  const generateDefaultMusic = async () => {
+    const defaultPrompts = [
+      'Epic cinematic background music for motivational content',
+      'Inspiring instrumental music with orchestral elements',
+      'Powerful background music for success and achievement'
+    ]
+    
+    const randomPrompt = defaultPrompts[Math.floor(Math.random() * defaultPrompts.length)]
+    await generateMusic(randomPrompt, 'instrumental, cinematic, epic, motivational')
+  }
+
+  // Handle music playback for AI-generated tracks
   const handlePlayMusic = () => {
-    if (!selectedTrack || !playingVideoId) {
-      console.log('🎵 No track selected')
+    if (!selectedTrack?.audioUrl) {
+      console.log('🎵 No track selected or no audio URL')
       return
     }
 
     console.log('🎵 Attempting to play:', selectedTrack.title)
     
-    // Always reset auto-play flag when user manually clicks play
-    setShouldAutoPlay(false)
-    
-    if (playerInstance && isPlayerReady) {
+    const audio = musicAudioRef.current
+    if (audio) {
       try {
         if (isPlaying) {
-          playerInstance.pauseVideo()
+          audio.pause()
           setIsPlaying(false)
           console.log('🎵 Paused music')
         } else {
-          playerInstance.playVideo()
+          audio.play()
           setIsPlaying(true)
           console.log('🎵 Started playing music')
         }
       } catch (error) {
-        console.log('🎵 Player method failed:', error)
-        // Set auto-play flag only if player failed
-        setShouldAutoPlay(true)
+        console.log('🎵 Audio playback failed:', error)
       }
-    } else {
-      console.log('🎵 Player not ready, will attempt when ready')
-      setShouldAutoPlay(true)
     }
   }
 
-  // Simplified track selection
+  // Select and play AI-generated track
   const playTrack = (track: MusicTrack) => {
     console.log('🎵 Selecting new track:', track.title)
     
-    const videoId = extractVideoId(track.url)
-    if (!videoId) {
-      console.log('🎵 Invalid video URL')
+    if (!track.audioUrl) {
+      console.log('🎵 No audio URL available for track')
       return
     }
 
@@ -335,24 +278,19 @@ export default function LuxuryScriptGenerator() {
       return
     }
 
+    // Stop current track
+    if (musicAudioRef.current) {
+      musicAudioRef.current.pause()
+      musicAudioRef.current.currentTime = 0
+    }
+
     setSelectedTrack(track)
     setIsPlaying(false)
-    setShouldAutoPlay(true)
-    
-    // Reset timeline for new track
     setCurrentTime(0)
     setTrackDuration(0)
-    setIsSeeking(false)
-    setIsPlayerReady(false)
+    setMusicProgress(0)
     
-    // Only recreate player if video ID is different or no player exists
-    if (playingVideoId !== videoId || !playerInstance) {
-      setPlayingVideoId(videoId)
-      setPlayerKey(prev => prev + 1)
-      console.log('🎵 Creating new player for different video:', track.title)
-    } else {
-      console.log('🎵 Using existing player for track:', track.title)
-    }
+    console.log('🎵 Track selected:', track.title)
   }
 
   // Famous people data
@@ -677,8 +615,8 @@ Return ONLY the optimized script, ready for voice generation.`
       const url = URL.createObjectURL(audioBlob)
       setAudioUrl(url)
       
-      // Load music after voice generation
-      await loadStandardMusic()
+      // Generate AI music after voice generation
+      await generateDefaultMusic()
       updateProgress(3) // Music selection step
       
     } catch (error) {
@@ -1540,7 +1478,7 @@ Return ONLY the optimized script, ready for voice generation.`
 
 
 
-        {/* Music Search and Player Section - Only show after voice is generated */}
+        {/* AI Music Generation Section - Only show after voice is generated */}
         {audioUrl && (
           <div ref={musicSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mt-8 rounded-2xl overflow-hidden">
             <div className="p-6">
@@ -1548,134 +1486,120 @@ Return ONLY the optimized script, ready for voice generation.`
                 <div className="w-7 h-7 bg-white/10 text-white/60 rounded-full flex items-center justify-center text-xs font-medium border border-white/20">
                   4
                 </div>
-                <span>Add Background Music</span>
+                <span>Generate AI Background Music</span>
               </h3>
               <p className="text-white/60 text-sm mt-2">
-                Search and play background music for your content
+                Generate custom AI music that perfectly fits your content using Suno AI
               </p>
             </div>
             <div className="px-6 pb-6">
 
-            {/* Music Categories */}
-            <div className="mb-6">
-              <h4 className="text-white/80 text-sm font-medium mb-4">Music Categories - Choose your vibe</h4>
+            {/* Music Generation Form */}
+            <div className="mb-6 space-y-4">
+              <div>
+                <label className="text-white/80 text-sm font-medium mb-2 block">Music Description</label>
+                <textarea
+                  value={musicPrompt}
+                  onChange={(e) => setMusicPrompt(e.target.value)}
+                  placeholder="Describe the music you want... e.g., 'Epic cinematic background music for motivational content'"
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-3 focus:border-white/20 focus:bg-white/10 focus:outline-none transition-all duration-200 placeholder:text-white/40 resize-none"
+                  rows={3}
+                />
+              </div>
+              
+              <div>
+                <label className="text-white/80 text-sm font-medium mb-2 block">Music Style</label>
+                <select
+                  value={musicStyle}
+                  onChange={(e) => setMusicStyle(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-3 focus:border-white/20 focus:bg-white/10 focus:outline-none transition-all duration-200"
+                >
+                  <option value="instrumental, cinematic, epic">Epic Cinematic</option>
+                  <option value="instrumental, motivational, uplifting">Motivational Uplifting</option>
+                  <option value="instrumental, ambient, calm">Ambient Calm</option>
+                  <option value="instrumental, rock, energetic">Energetic Rock</option>
+                  <option value="instrumental, electronic, modern">Modern Electronic</option>
+                  <option value="instrumental, orchestral, dramatic">Orchestral Dramatic</option>
+                </select>
+              </div>
+
+              {/* Generate Button */}
+              <Button
+                onClick={() => {
+                  const prompt = musicPrompt.trim() || 'Epic cinematic background music for motivational content'
+                  generateMusic(prompt, musicStyle)
+                }}
+                disabled={isGeneratingMusic}
+                className="w-full bg-gradient-to-r from-purple-500/20 to-blue-500/20 hover:from-purple-500/30 hover:to-blue-500/30 border border-purple-500/30 hover:border-purple-500/50 text-white font-medium py-4 rounded-xl transition-all duration-200"
+              >
+                {isGeneratingMusic ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    Generating AI Music... (This may take 1-2 minutes)
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5" />
+                    Generate AI Music
+                  </div>
+                )}
+              </Button>
+              
+              {/* Quick Generation Buttons */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 {[
-                  { label: 'Fearless Motivation', query: 'fearless motivation instrumentals' },
-                  { label: 'Epic After AShamaluevMusic', query: 'AShamaluevMusic epic' },
-                  { label: 'Legendary Secession', query: 'secession studios' }
-                ].map((category) => (
+                  { label: 'Epic Motivation', prompt: 'Epic cinematic background music for motivational content', style: 'instrumental, cinematic, epic, motivational' },
+                  { label: 'Success Anthem', prompt: 'Powerful anthem music for success and achievement', style: 'instrumental, orchestral, triumphant' },
+                  { label: 'Focus Flow', prompt: 'Calm ambient music for focus and concentration', style: 'instrumental, ambient, peaceful' }
+                ].map((preset) => (
                   <Button
-                    key={category.label}
-                    onClick={() => searchMusic(category.query)}
-                    disabled={isLoadingMusic}
+                    key={preset.label}
+                    onClick={() => generateMusic(preset.prompt, preset.style)}
+                    disabled={isGeneratingMusic}
                     className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white/70 hover:text-white text-xs px-3 py-2 h-auto rounded-lg font-normal"
                   >
-                    {category.label}
+                    {preset.label}
                   </Button>
                 ))}
               </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="flex gap-3 mb-8">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/30 w-4 h-4" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      searchMusic(searchQuery || 'fearless motivation instrumentals')
-                    }
-                  }}
-                  placeholder="Search for background music..."
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-3 pl-10 focus:border-white/20 focus:bg-white/10 focus:outline-none transition-all duration-200 placeholder:text-white/40"
-                />
-              </div>
-              <Button
-                onClick={() => searchMusic(searchQuery || 'fearless motivation instrumentals')}
-                disabled={isLoadingMusic}
-                className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 rounded-lg"
-              >
-                {isLoadingMusic ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                ) : (
-                  <Search className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
-
-            {/* Hidden YouTube Player for background music - Optimized for Mobile */}
-            {playingVideoId && (
-              <div className="hidden">
-                <YouTube
-                  key={`${playingVideoId}-${playerKey}`}
-                  videoId={playingVideoId}
-                  opts={{
-                    width: '1',
-                    height: '1',
-                    playerVars: {
-                      // Optimized for mobile and faster loading
-                      autoplay: 0, // Required for mobile
-                      enablejsapi: 1,
-                      controls: 0, // Hide controls for faster loading
-                      disablekb: 1, // Disable keyboard for faster loading
-                      iv_load_policy: 3, // Disable annotations
-                      modestbranding: 1, // Remove YouTube branding
-                      rel: 0, // Don't show related videos
-                      fs: 0, // Disable fullscreen
-                      playsinline: 1, // Play inline on mobile
-                    },
-                  }}
-                  onReady={handlePlayerReady}
-                  onPlay={() => {
-                    console.log('🎵 YouTube Music player started playing')
-                    setIsPlaying(true)
-                    setShouldAutoPlay(false) // Reset auto-play flag when playing starts
-                  }}
-                  onPause={() => {
-                    console.log('🎵 YouTube Music player paused')
-                    setIsPlaying(false)
-                  }}
-                  onEnd={() => {
-                    console.log('🎵 YouTube Music player ended')
-                    setIsPlaying(false)
-                    setShouldAutoPlay(false) // Reset auto-play flag
-                  }}
-                  onError={(error) => {
-                    const playerError = error as YouTubePlayerError;
-                    const errorCode = playerError?.data
-                    console.log('🎵 YouTube Music player error:', errorCode)
-                    
-                    if (errorCode === 150 || errorCode === 101) {
-                      console.log('🎵 Music track restricted')
-                    } else {
-                      console.log('🎵 Failed to load music track')
-                    }
-                    
-                    setIsPlaying(false)
-                    setIsPlayerReady(false)
-                    setShouldAutoPlay(false) // Cancel auto-play on error
-                  }}
-                />
-              </div>
+            {/* Hidden Audio Player for AI-generated music */}
+            {selectedTrack?.audioUrl && (
+              <audio
+                ref={musicAudioRef}
+                src={selectedTrack.audioUrl}
+                onLoadedMetadata={() => {
+                  if (musicAudioRef.current) {
+                    setTrackDuration(musicAudioRef.current.duration)
+                  }
+                }}
+                onTimeUpdate={() => {
+                  if (musicAudioRef.current) {
+                    setCurrentTime(musicAudioRef.current.currentTime)
+                    setMusicProgress((musicAudioRef.current.currentTime / (musicAudioRef.current.duration || 1)) * 100)
+                  }
+                }}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+                className="hidden"
+              />
             )}
 
-            {/* Music Tracks List */}
-            {isLoadingMusic ? (
+            {/* AI Music Tracks List */}
+            {isGeneratingMusic ? (
               <div className="flex items-center justify-center p-8">
                 <div className="flex items-center gap-3">
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span className="text-white/60">Searching for music...</span>
+                  <span className="text-white/60">Generating AI music... Please wait 1-2 minutes</span>
                 </div>
               </div>
             ) : musicTracks.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-white/80 text-sm font-medium">Select Background Music</h4>
-                  <span className="text-xs text-white/50">{musicTracks.length} tracks found</span>
+                  <h4 className="text-white/80 text-sm font-medium">AI Generated Music</h4>
+                  <span className="text-xs text-white/50">{musicTracks.length} track{musicTracks.length !== 1 ? 's' : ''} generated</span>
                 </div>
 
                 <div className="space-y-2 sm:space-y-3 max-h-80 sm:max-h-96 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
@@ -1752,32 +1676,22 @@ Return ONLY the optimized script, ready for voice generation.`
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                
-                                // Use consistent play/pause logic
                                 handlePlayMusic()
                               }}
                               className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
-                                playingVideoId && isPlaying
+                                isPlaying
                                   ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
                                   : 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
                               }`}
                             >
-                              {playingVideoId && isPlaying ? (
+                              {isPlaying ? (
                                 <div className="flex items-center justify-center gap-1 sm:gap-2">
                                   <Pause className="w-4 h-4" />
                                   <span className="font-semibold">PAUSE</span>
                                 </div>
                               ) : (
-                                <div className={`flex items-center justify-center gap-1 sm:gap-2 transition-all duration-300 ${
-                                  shouldAutoPlay && playingVideoId === extractVideoId(track.url) 
-                                    ? 'animate-pulse' 
-                                    : ''
-                                }`}>
-                                  <Play className={`w-4 h-4 transition-transform duration-300 ${
-                                    shouldAutoPlay && playingVideoId === extractVideoId(track.url)
-                                      ? 'animate-pulse scale-110'
-                                      : ''
-                                  }`} />
+                                <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                  <Play className="w-4 h-4" />
                                   <span className="font-semibold">PLAY</span>
                                 </div>
                               )}
@@ -1802,7 +1716,7 @@ Return ONLY the optimized script, ready for voice generation.`
                       </div>
 
                       {/* Timeline Progress Bar - Only show for currently playing track */}
-                      {selectedTrack?.id === track.id && playingVideoId && isPlaying && (
+                      {selectedTrack?.id === track.id && selectedTrack.audioUrl && isPlaying && (
                         <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-white/10" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2 sm:gap-3">
                             <span className="text-xs text-white/50 w-8 sm:w-10 text-right font-mono">
@@ -1815,10 +1729,6 @@ Return ONLY the optimized script, ready for voice generation.`
                                 max={trackDuration || 100}
                                 value={currentTime || 0}
                                 onChange={handleSeek}
-                                onMouseDown={handleSeekStart}
-                                onMouseUp={handleSeekEnd}
-                                onTouchStart={handleSeekStart}
-                                onTouchEnd={handleSeekEnd}
                                 className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer slider-thumb touch-manipulation"
                                 style={{
                                   background: `linear-gradient(to right, rgba(34,197,94,0.6) 0%, rgba(34,197,94,0.6) ${trackDuration > 0 ? (currentTime / trackDuration) * 100 : 0}%, rgba(255,255,255,0.1) ${trackDuration > 0 ? (currentTime / trackDuration) * 100 : 0}%, rgba(255,255,255,0.1) 100%)`
@@ -1840,12 +1750,12 @@ Return ONLY the optimized script, ready for voice generation.`
                 <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-white/10">
                   <Music className="w-8 h-8 text-white/30" />
                 </div>
-                <p className="text-white/50 mb-4">No music found. Try a different search term.</p>
+                <p className="text-white/50 mb-4">No AI music generated yet. Click "Generate AI Music" above to create custom background music.</p>
                 <Button
-                  onClick={() => searchMusic('fearless motivation instrumentals')}
+                  onClick={() => generateDefaultMusic()}
                   className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 py-2 rounded-lg"
                 >
-                  Load Default Music
+                  Generate Default Music
                 </Button>
               </div>
             )}
