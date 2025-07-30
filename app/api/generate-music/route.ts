@@ -26,6 +26,14 @@ export async function POST(request: NextRequest) {
     console.log('🎵 Instrumental:', instrumental)
 
     const kieApiKey = process.env.KIE_API_KEY
+    
+    // Debug environment variables
+    console.log('🔑 Environment variables check:')
+    console.log('🔑 KIE_API_KEY exists:', !!kieApiKey)
+    console.log('🔑 KIE_API_KEY length:', kieApiKey ? kieApiKey.length : 0)
+    console.log('🔑 KIE_API_KEY preview:', kieApiKey ? `${kieApiKey.substring(0, 8)}...${kieApiKey.substring(kieApiKey.length - 4)}` : 'null')
+    console.log('🔑 All KIE env vars:', Object.keys(process.env).filter(key => key.includes('KIE')))
+    
     if (!kieApiKey) {
       console.error('🎵 KIE_API_KEY not found in environment variables')
       return NextResponse.json({ 
@@ -128,6 +136,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const kieApiKey = process.env.KIE_API_KEY
+    
+    // Debug environment variables for GET endpoint
+    console.log('🔑 GET endpoint - KIE_API_KEY exists:', !!kieApiKey)
+    console.log('🔑 GET endpoint - KIE_API_KEY length:', kieApiKey ? kieApiKey.length : 0)
+    
     if (!kieApiKey) {
       return NextResponse.json({ 
         success: false, 
