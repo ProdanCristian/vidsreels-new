@@ -116,13 +116,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper function to convert seconds to MM:SS format
-function formatDuration(seconds: number | null | undefined): string {
-  if (!seconds || isNaN(seconds)) return 'Unknown'
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = Math.floor(seconds % 60)
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-}
+
 
 // GET endpoint for checking generation status
 export async function GET(request: NextRequest) {
