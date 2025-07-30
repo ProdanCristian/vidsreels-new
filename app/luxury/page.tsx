@@ -386,39 +386,7 @@ export default function LuxuryScriptGenerator() {
     console.log('🎵 Track selected (ready for manual play):', track.title)
   }
 
-  // Simplified track selection - mobile optimized (kept for backward compatibility)
-  const playTrack = (track: MusicTrack) => {
-    console.log('🎵 Selecting new track:', track.title)
-    
-    const videoId = extractVideoId(track.url)
-    if (!videoId) {
-      console.log('🎵 Invalid video URL')
-      return
-    }
 
-    // If same track is already selected, just toggle play/pause
-    if (selectedTrack?.id === track.id) {
-      handlePlayMusic()
-      return
-    }
-
-    setSelectedTrack(track)
-    setIsPlaying(false)
-    
-    // Only set auto-play on desktop, mobile requires explicit user interaction
-    setShouldAutoPlay(!isMobile)
-    
-    // Reset timeline for new track
-    setCurrentTime(0)
-    setTrackDuration(0)
-    setIsSeeking(false)
-    setIsPlayerReady(false)
-    
-    // Always recreate player for new track to ensure clean state
-    setPlayingVideoId(videoId)
-    setPlayerKey(prev => prev + 1)
-    console.log('🎵 Creating new player for track:', track.title, isMobile ? '(mobile)' : '(desktop)')
-  }
 
   // Famous people data
   const famousPeople: FamousPerson[] = [
