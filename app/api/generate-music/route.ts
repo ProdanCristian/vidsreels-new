@@ -12,17 +12,18 @@ interface KieApiTrack {
 }
 
 interface KieApiResponse {
-  success?: boolean
-  error?: string
-  id?: string
-  task_id?: string
-  audio_url?: string
-  audioUrl?: string
-  title?: string
-  duration?: number
-  image_url?: string
-  style?: string
-  status?: string
+  code: number
+  msg: string
+  data?: {
+    taskId?: string
+    audio_url?: string
+    audioUrl?: string
+    title?: string
+    duration?: number
+    image_url?: string
+    style?: string
+    status?: string
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
         customMode: true,
         instrumental: instrumental,
         model: 'V3_5',
+        callBackUrl: 'https://api.example.com/callback', // Required by KIE.ai
         negativeTags: ''
       }
     }
@@ -92,44 +94,22 @@ export async function POST(request: NextRequest) {
       const apiData = await apiResponse.json()
       console.log('🎵 KIE.ai API response received:', apiData)
 
-      // Handle KIE.ai response format (update based on actual response structure)
-      // For now, we'll handle both success and pending cases
-      if (apiData.error) {
-        console.error('🎵 KIE.ai API returned error:', apiData.error)
+      // Handle KIE.ai response format: {code: 200, msg: "success", data: {taskId: "..."}}
+      if (apiData.code !== 200) {
+        console.error('🎵 KIE.ai API returned error:', apiData.msg)
         return NextResponse.json({ 
           success: false, 
           error: 'Music generation failed',
-          details: apiData.error
+          details: apiData.msg
         }, { status: 500 })
       }
 
-      // If KIE.ai returns immediate results
-      if (apiData.audio_url || apiData.audioUrl) {
-        const track = {
-          id: apiData.id || Date.now().toString(),
-          title: apiData.title || 'AI Generated Music',
-          artist: 'KIE.ai Generated',
-          thumbnail: apiData.image_url || '/music-placeholder.png',
-          duration: formatDuration(apiData.duration || 120),
-          url: apiData.audio_url || apiData.audioUrl,
-          audioUrl: apiData.audio_url || apiData.audioUrl,
-          style: style,
-          state: 'succeeded'
-        }
-
-        return NextResponse.json({
-          success: true,
-          tracks: [track],
-          task_id: apiData.id || apiData.task_id
-        })
-      }
-
-      // If KIE.ai returns a task ID for async processing
-      if (apiData.task_id || apiData.id) {
+      // KIE.ai returns a task ID for async processing
+      if (apiData.data && apiData.data.taskId) {
         return NextResponse.json({
           success: true,
           tracks: [],
-          task_id: apiData.task_id || apiData.id,
+          task_id: apiData.data.taskId,
           status: 'processing',
           message: 'Music generation started. Check back in a few moments.'
         })
