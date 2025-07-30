@@ -312,8 +312,8 @@ export default function LuxuryScriptGenerator() {
     }
   }
 
-  // Simplified play function - mobile optimized
-  const handlePlayMusic = async () => {
+  // Enhanced play function with retry logic to prevent crashes
+  const handlePlayMusicWithRetry = async () => {
     if (!selectedTrack || !playingVideoId) {
       console.log('🎵 No track selected')
       return
@@ -324,33 +324,61 @@ export default function LuxuryScriptGenerator() {
     // Always reset auto-play flag when user manually clicks play
     setShouldAutoPlay(false)
     
-    if (playerInstance && isPlayerReady) {
+    if (isPlaying && playerInstance) {
+      // If already playing, just pause
       try {
-        if (isPlaying) {
-          playerInstance.pauseVideo()
-          setIsPlaying(false)
-          console.log('🎵 Paused music')
-        } else {
-          // Direct play approach - especially important for mobile
-          await playerInstance.playVideo()
-          setIsPlaying(true)
-          console.log('🎵 Started playing music')
-        }
+        playerInstance.pauseVideo()
+        setIsPlaying(false)
+        console.log('🎵 Paused music')
+        return
       } catch (error) {
-        console.log('🎵 Player method failed:', error)
-        // For mobile, we don't retry auto-play, user needs to click again
-        if (!isMobile) {
-          setShouldAutoPlay(true)
-        }
-      }
-    } else {
-      console.log('🎵 Player not ready')
-      // On mobile, don't set auto-play flag, let user click when ready
-      if (!isMobile) {
-        setShouldAutoPlay(true)
+        console.log('🎵 Pause failed:', error)
+        setIsPlaying(false)
+        return
       }
     }
+
+    // Wait for player to be ready with retry logic
+    const maxRetries = 5
+    let attempts = 0
+    
+    const attemptPlay = async (): Promise<boolean> => {
+      attempts++
+      console.log(`🎵 Play attempt ${attempts}/${maxRetries}`)
+      
+      if (!playerInstance) {
+        console.log('🎵 No player instance, waiting...')
+        return false
+      }
+      
+      try {
+        // Try to play the video
+        await playerInstance.playVideo()
+        setIsPlaying(true)
+        console.log('🎵 Play successful!')
+        return true
+      } catch (error) {
+        console.log(`🎵 Play attempt ${attempts} failed:`, error)
+        return false
+      }
+    }
+    
+    // Try immediate play first
+    const success = await attemptPlay()
+    if (success) return
+    
+    // If immediate play failed, retry with delays
+    while (attempts < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 500)) // Wait 500ms between attempts
+      
+      const retrySuccess = await attemptPlay()
+      if (retrySuccess) return
+    }
+    
+    console.log('🎵 All play attempts failed')
   }
+
+
 
   // Select track without playing - for card clicks
   const selectTrackOnly = (track: MusicTrack) => {
@@ -1771,11 +1799,7 @@ Return ONLY the optimized script, ready for voice generation.`
                                 <span className="text-green-400 text-xs font-medium">
                                   Selected
                                 </span>
-                                {isMobile && !isPlayerReady && (
-                                  <span className="text-yellow-400 text-xs font-medium ml-1">
-                                    • Loading...
-                                  </span>
-                                )}
+
                               </div>
                             )}
                           </div>
@@ -1786,20 +1810,16 @@ Return ONLY the optimized script, ready for voice generation.`
                           <div className="flex items-center">
                             <Button
                               size="sm"
-                              disabled={isMobile && !isPlayerReady}
                               onClick={async (e) => {
                                 e.stopPropagation()
                                 
-                                // Mobile-optimized click handler
-                                console.log('🎵 Play button clicked -', isMobile ? 'mobile' : 'desktop')
-                                await handlePlayMusic()
+                                console.log('🎵 Play button clicked')
+                                await handlePlayMusicWithRetry()
                               }}
                               className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
-                                isMobile && !isPlayerReady
-                                  ? 'bg-gray-500/30 border-2 border-gray-400/60 text-gray-300 cursor-not-allowed opacity-70'
-                                  : playingVideoId && isPlaying
-                                    ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
-                                    : 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
+                                playingVideoId && isPlaying
+                                  ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
+                                  : 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
                               }`}
                             >
                               {playingVideoId && isPlaying ? (
@@ -1818,9 +1838,7 @@ Return ONLY the optimized script, ready for voice generation.`
                                       ? 'animate-pulse scale-110'
                                       : ''
                                   }`} />
-                                  <span className="font-semibold">
-                                    {isMobile && !isPlayerReady ? 'LOADING' : 'PLAY'}
-                                  </span>
+                                  <span className="font-semibold">PLAY</span>
                                 </div>
                               )}
                             </Button>
