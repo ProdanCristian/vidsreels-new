@@ -42,14 +42,21 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Generate music using Suno API
-    const sunoResponse = await fetch('https://api.acedata.cloud/suno/audios', {
+    // TODO: Replace with actual KIE.ai API endpoint
+    // The current endpoint is for ACE Data Cloud, not KIE.ai
+    // We need the real KIE.ai music generation endpoint
+    console.log('🎵 Using KIE.ai API for music generation...')
+    
+    // PLACEHOLDER: This needs to be replaced with the actual KIE.ai endpoint
+    // Current endpoint is incorrect - this is ACE Data Cloud, not KIE.ai
+    const kieApiResponse = await fetch('https://api.acedata.cloud/suno/audios', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${kieApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        // TODO: Update request body format for KIE.ai API
         action: 'generate',
         prompt: prompt,
         style: style,
@@ -58,9 +65,9 @@ export async function POST(request: NextRequest) {
       }),
     })
 
-    if (!sunoResponse.ok) {
-      console.error('🎵 Suno API error:', sunoResponse.status, sunoResponse.statusText)
-      const errorText = await sunoResponse.text()
+    if (!kieApiResponse.ok) {
+      console.error('🎵 Suno API error:', kieApiResponse.status, kieApiResponse.statusText)
+      const errorText = await kieApiResponse.text()
       console.error('🎵 Suno API error details:', errorText)
       return NextResponse.json({ 
         success: false, 
@@ -68,7 +75,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    const sunoData: SunoResponse = await sunoResponse.json()
+    const sunoData: SunoResponse = await kieApiResponse.json()
     console.log('🎵 Suno API response:', sunoData)
 
     if (!sunoData.success || !sunoData.data) {
