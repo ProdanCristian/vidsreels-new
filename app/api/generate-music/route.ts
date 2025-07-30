@@ -1,31 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-interface KieApiTrack {
-  id: string
-  title: string
-  audio_url?: string
-  audioUrl?: string
-  image_url?: string
-  duration?: number
-  style?: string
-  status?: string
-}
-
-interface KieApiResponse {
-  code: number
-  msg: string
-  data?: {
-    taskId?: string
-    audio_url?: string
-    audioUrl?: string
-    title?: string
-    duration?: number
-    image_url?: string
-    style?: string
-    status?: string
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     const { prompt, style = "instrumental, cinematic, epic", instrumental = true } = await request.json()
