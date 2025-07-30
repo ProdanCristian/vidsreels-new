@@ -312,20 +312,20 @@ export default function LuxuryScriptGenerator() {
     }
   }
 
-  // Enhanced play function with retry logic to prevent crashes
+  // Simplified play function to prevent auto-pausing issues
   const handlePlayMusicWithRetry = async () => {
     if (!selectedTrack || !playingVideoId) {
       console.log('🎵 No track selected')
       return
     }
 
-    console.log('🎵 Attempting to play:', selectedTrack.title)
+    console.log('🎵 Play/Pause button clicked for:', selectedTrack.title)
     
     // Always reset auto-play flag when user manually clicks play
     setShouldAutoPlay(false)
     
+    // If currently playing, pause it
     if (isPlaying && playerInstance) {
-      // If already playing, just pause
       try {
         playerInstance.pauseVideo()
         setIsPlaying(false)
@@ -338,44 +338,29 @@ export default function LuxuryScriptGenerator() {
       }
     }
 
-    // Wait for player to be ready with retry logic
-    const maxRetries = 5
-    let attempts = 0
-    
-    const attemptPlay = async (): Promise<boolean> => {
-      attempts++
-      console.log(`🎵 Play attempt ${attempts}/${maxRetries}`)
-      
-      if (!playerInstance) {
-        console.log('🎵 No player instance, waiting...')
-        return false
-      }
-      
-      try {
-        // Try to play the video
-        await playerInstance.playVideo()
-        setIsPlaying(true)
-        console.log('🎵 Play successful!')
-        return true
-      } catch (error) {
-        console.log(`🎵 Play attempt ${attempts} failed:`, error)
-        return false
-      }
+    // If not playing, try to play
+    if (!playerInstance) {
+      console.log('🎵 Player not ready yet, please wait a moment and try again')
+      return
     }
-    
-    // Try immediate play first
-    const success = await attemptPlay()
-    if (success) return
-    
-    // If immediate play failed, retry with delays
-    while (attempts < maxRetries) {
-      await new Promise(resolve => setTimeout(resolve, 500)) // Wait 500ms between attempts
-      
-      const retrySuccess = await attemptPlay()
-      if (retrySuccess) return
+
+    try {
+      console.log('🎵 Starting playback...')
+      // Don't set isPlaying here - let the onPlay event handle it
+      await playerInstance.playVideo()
+      console.log('🎵 Play command sent to player')
+    } catch (error) {
+      console.log('🎵 Play failed:', error)
+      // Try once more after a short delay
+      setTimeout(async () => {
+        try {
+          console.log('🎵 Retrying play...')
+          await playerInstance.playVideo()
+        } catch (retryError) {
+          console.log('🎵 Retry failed:', retryError)
+        }
+      }, 1000)
     }
-    
-    console.log('🎵 All play attempts failed')
   }
 
 
