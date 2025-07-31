@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 
 export interface PollingOptions {
   interval?: number;
   maxAttempts?: number;
-  onSuccess?: (data: any) => void;
-  onError?: (error: any) => void;
+  onSuccess?: (data: unknown) => void;
+  onError?: (error: unknown) => void;
   onMaxAttemptsReached?: () => void;
 }
 
@@ -101,7 +101,7 @@ export function usePolling(
 }
 
 // Utility function to poll for image results
-export async function pollImageResult(taskId: string): Promise<any> {
+export async function pollImageResult(taskId: string): Promise<unknown> {
   const maxAttempts = 30;
   const interval = 2000;
   
@@ -136,7 +136,7 @@ export async function pollImageResult(taskId: string): Promise<any> {
 }
 
 // Utility function to poll for video results
-export async function pollVideoResult(taskId: string): Promise<any> {
+export async function pollVideoResult(taskId: string): Promise<unknown> {
   const maxAttempts = 60; // Videos take longer, so more attempts
   const interval = 3000;
   

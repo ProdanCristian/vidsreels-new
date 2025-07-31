@@ -199,7 +199,7 @@ export default function LuxuryScriptGenerator() {
   const pollForImageResult = async (taskId: string) => {
     try {
       console.log(`🔄 Starting polling for image task: ${taskId}`);
-      const result = await pollImageResult(taskId);
+      const result = await pollImageResult(taskId) as any;
       
       if (result.code === 200 && result.data?.info?.resultImageUrl) {
         console.log(`✅ Image completed for task ${taskId}:`, result.data.info.resultImageUrl);
@@ -248,7 +248,7 @@ export default function LuxuryScriptGenerator() {
   const pollForVideoResult = async (taskId: string) => {
     try {
       console.log(`🔄 Starting polling for video task: ${taskId}`);
-      const result = await pollVideoResult(taskId);
+      const result = await pollVideoResult(taskId) as any;
       
       if (result.code === 200 && result.data?.video_url) {
         console.log(`✅ Video completed for task ${taskId}:`, result.data.video_url);
@@ -892,68 +892,6 @@ Return ONLY the optimized script, ready for voice generation.`
     }
   }
 
-  // Polling mechanism for status updates
-  const startPollingForImageResults = async (imageResults: SceneImageResult[]) => {
-    const pendingTasks = imageResults.filter(r => r.status === 'pending');
-    if (pendingTasks.length === 0) return;
-    
-    console.log(`🔄 Polling for ${pendingTasks.length} pending image tasks...`);
-    
-    for (const task of pendingTasks) {
-      try {
-        const response = await fetch(`/api/kie-status?taskId=${task.taskId}`);
-        const result = await response.json();
-        
-        if (result.success && result.data?.data) {
-          const taskData = result.data.data;
-          console.log(`📊 Task ${task.taskId} status:`, taskData.successFlag, taskData.response);
-          
-          if (taskData.successFlag === 1 && taskData.response?.resultImageUrl) {
-            // Success
-            console.log(`✅ Image ready for task ${task.taskId}:`, taskData.response.resultImageUrl);
-            setSceneImageResults(prev => 
-              prev.map(result => 
-                result.taskId === task.taskId
-                  ? { ...result, status: 'completed', imageUrl: taskData.response.resultImageUrl }
-                  : result
-              )
-            );
-          } else if (taskData.successFlag === 2 || taskData.successFlag === 3) {
-            // Failed
-            console.log(`❌ Image failed for task ${task.taskId}:`, taskData.errorMessage);
-            setSceneImageResults(prev => 
-              prev.map(result => 
-                result.taskId === task.taskId
-                  ? { ...result, status: 'failed', error: taskData.errorMessage || 'Generation failed' }
-                  : result
-              )
-            );
-          }
-        }
-      } catch (error) {
-        console.error(`Error polling task ${task.taskId}:`, error);
-      }
-    }
-    
-    // Check if we need to continue polling
-    setSceneImageResults(current => {
-      const stillPending = current.filter(r => r.status === 'pending');
-      if (stillPending.length > 0) {
-        console.log(`🔄 ${stillPending.length} tasks still pending, continuing to poll...`);
-        setTimeout(() => startPollingForImageResults(current), 5000);
-      } else {
-        console.log('🎉 All image tasks completed!');
-        const allCompleted = current.every(r => r.status === 'completed');
-        if (allCompleted && current.length > 0) {
-          console.log('🎬 Starting video generation...');
-          setTimeout(() => {
-            handleGenerateVideos();
-          }, 1000);
-        }
-      }
-      return current;
-    });
-  };
 
   // Get voice duration from audio element
   const updateVoiceDuration = () => {

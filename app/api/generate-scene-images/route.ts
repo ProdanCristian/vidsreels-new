@@ -3,7 +3,7 @@ import { createKieClient } from '@/lib/kie';
 
 export async function POST(request: NextRequest) {
   try {
-    const { scenes, userId } = await request.json();
+    const { scenes } = await request.json();
 
     if (!scenes || !Array.isArray(scenes) || scenes.length === 0) {
       return NextResponse.json(

@@ -3,7 +3,7 @@ import { generateScript } from '@/lib/aiml';
 
 export async function POST(request: NextRequest) {
   try {
-    const { script, voiceUrl, voiceDuration } = await request.json();
+    const { script, voiceDuration } = await request.json();
 
     if (!script || !script.trim()) {
       return NextResponse.json(
