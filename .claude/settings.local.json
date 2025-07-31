@@ -4,7 +4,10 @@
       "Bash(npm run dev:*)",
       "Bash(curl:*)",
       "Bash(lsof:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(kill:*)"
     ],
     "deny": []
   }

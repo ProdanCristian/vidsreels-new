@@ -6,9 +6,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog'
 import DashboardHeader from '@/components/dashboard-header'
-import { Crown, Sparkles, Volume2, Mic, Check, Music, Play, Pause, Search, Edit3, Save, X } from 'lucide-react'
+import { Crown, Sparkles, Volume2, Mic, Check, Music, Play, Pause, Search, Edit3, Save, X, Camera, Film, Download } from 'lucide-react'
 import Image from 'next/image'
 import YouTube from 'react-youtube'
+import { pollImageResult, pollVideoResult } from '@/lib/polling-utils'
 
 interface FamousPerson {
   id: string
@@ -43,6 +44,33 @@ interface YouTubePlayerError {
   data: number;
 }
 
+interface Scene {
+  id: number;
+  duration: number;
+  prompt: string;
+  description: string;
+  cameraMovement: string;
+  timing: string;
+  enhancedPrompt?: string;
+}
+
+interface SceneImageResult {
+  sceneId: number;
+  taskId: string;
+  status: 'pending' | 'completed' | 'failed';
+  imageUrl?: string;
+  error?: string;
+}
+
+interface SceneVideoResult {
+  sceneId: number;
+  taskId: string;
+  status: 'pending' | 'completed' | 'failed';
+  videoUrl?: string;
+  coverImageUrl?: string;
+  error?: string;
+}
+
 export default function LuxuryScriptGenerator() {
   // Core states
   const [selectedPerson, setSelectedPerson] = useState<FamousPerson | null>(null)
@@ -63,6 +91,15 @@ export default function LuxuryScriptGenerator() {
   const [temperature, setTemperature] = useState(0.9) // Voice creativity
   const [topP, setTopP] = useState(0.9) // Voice diversity
 
+  // Scene generation states
+  const [scenes, setScenes] = useState<Scene[]>([])
+  const [isGeneratingScenes, setIsGeneratingScenes] = useState(false)
+  const [sceneImageResults, setSceneImageResults] = useState<SceneImageResult[]>([])
+  const [sceneVideoResults, setSceneVideoResults] = useState<SceneVideoResult[]>([])
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false)
+  const [isGeneratingVideos, setIsGeneratingVideos] = useState(false)
+  const [voiceDuration, setVoiceDuration] = useState<number | null>(null)
+
   // Music recommendation states
   const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([])
   const [isLoadingMusic, setIsLoadingMusic] = useState(false)
@@ -75,22 +112,22 @@ export default function LuxuryScriptGenerator() {
   const [trackDuration, setTrackDuration] = useState(0)
   const [isSeeking, setIsSeeking] = useState(false)
   const [isPlayerReady, setIsPlayerReady] = useState(false)
-  const [shouldAutoPlay, setShouldAutoPlay] = useState(false) // Track if we should auto-play when ready
   
-  // Progress tracking
-  const [currentStep, setCurrentStep] = useState(0) // 0: person, 1: script, 2: voice, 3: music
+  // Progress tracking - Updated to include scene step
+  const [currentStep, setCurrentStep] = useState(0) // 0: person, 1: script, 2: voice, 3: scenes, 4: music
   const [showScrollHint, setShowScrollHint] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement>(null)
   
+  
   // YouTube player management - simplified approach
   const [playerInstance, setPlayerInstance] = useState<YoutubePlayer | null>(null)
-  const [isMobile, setIsMobile] = useState(false)
   
   // Section refs for auto-scroll
   const personSectionRef = useRef<HTMLDivElement>(null)
   const scriptSectionRef = useRef<HTMLDivElement>(null)
   const voiceSectionRef = useRef<HTMLDivElement>(null)
+  const sceneSectionRef = useRef<HTMLDivElement>(null)
   const musicSectionRef = useRef<HTMLDivElement>(null)
 
   // Progress tracking helper
@@ -101,49 +138,168 @@ export default function LuxuryScriptGenerator() {
     setTimeout(() => setShowScrollHint(false), 3000)
   }
 
-  // Mobile detection effect
-  useEffect(() => {
-    const checkMobile = () => {
-      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-        ('ontouchstart' in window) ||
-        (window.innerWidth <= 768)
-      setIsMobile(isMobileDevice)
-    }
+  // Video generation function (defined here to avoid forward reference issues)
+  const handleGenerateVideos = async () => {
+    const completedImages = sceneImageResults.filter(r => r.status === 'completed' && r.imageUrl);
     
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+    if (completedImages.length === 0) {
+      console.log('No completed images available for video generation');
+      return;
+    }
 
-  // Auto-play effect - more mobile-friendly approach
-  useEffect(() => {
-    // Skip auto-play on mobile to avoid conflicts with user interaction requirements
-    if (isMobile) {
-      setShouldAutoPlay(false)
-      return
-    }
-    
-    if (isPlayerReady && shouldAutoPlay && playerInstance && !isPlaying) {
-      console.log('🎵 Auto-play triggered - desktop only')
+    setIsGeneratingVideos(true);
+    setSceneVideoResults([]);
+
+    try {
+      console.log(`Starting video generation for ${completedImages.length} images...`);
       
-      // Small delay to ensure everything is ready
-      const timer = setTimeout(() => {
-        try {
-          if (playerInstance && typeof playerInstance.playVideo === 'function') {
-            playerInstance.playVideo()
-            setIsPlaying(true)
-            setShouldAutoPlay(false) // Reset flag after successful play
-            console.log('🎵 Auto-play command sent')
-          }
-        } catch (error) {
-          console.log('🎵 Auto-play failed:', error)
-          setShouldAutoPlay(false)
+      const response = await fetch('/api/generate-scene-videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          scenes: scenes,
+          imageResults: completedImages
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to start video generation');
+      
+      const data = await response.json();
+      
+      if (!data.success || !data.data?.videoResults) {
+        throw new Error('No video generation tasks started');
+      }
+      
+      // Initialize video results with pending status
+      const videoResults: SceneVideoResult[] = data.data.videoResults.map((result: any) => ({
+        sceneId: result.sceneId,
+        taskId: result.videoTaskId,
+        status: result.success ? 'pending' : 'failed',
+        error: result.error
+      }));
+      
+      setSceneVideoResults(videoResults);
+      console.log(`Started ${data.data.successCount} video generation tasks`);
+      
+      // Start polling for all video results
+      console.log('🔄 Starting polling for video results...');
+      videoResults.forEach((result) => {
+        if (result.status === 'pending') {
+          setTimeout(() => pollForVideoResult(result.taskId), 3000);
         }
-      }, 300)
-      
-      return () => clearTimeout(timer)
+      });
+
+    } catch (error) {
+      console.error('Error starting video generation:', error);
+      setIsGeneratingVideos(false);
     }
-  }, [isPlayerReady, shouldAutoPlay, isPlaying, playerInstance, isMobile])
+  };
+
+  // Polling functions for scene generation results
+  const pollForImageResult = async (taskId: string) => {
+    try {
+      console.log(`🔄 Starting polling for image task: ${taskId}`);
+      const result = await pollImageResult(taskId);
+      
+      if (result.code === 200 && result.data?.info?.resultImageUrl) {
+        console.log(`✅ Image completed for task ${taskId}:`, result.data.info.resultImageUrl);
+        setSceneImageResults(prev => 
+          prev.map(r => 
+            r.taskId === taskId
+              ? { ...r, status: 'completed', imageUrl: result.data.info.resultImageUrl }
+              : r
+          )
+        );
+        
+        // Check if all images are completed, then start video generation
+        setTimeout(() => {
+          setSceneImageResults(current => {
+            const allCompleted = current.every(r => r.status === 'completed');
+            if (allCompleted && current.length > 0) {
+              console.log('All images completed, starting video generation...');
+              handleGenerateVideos();
+            }
+            return current;
+          });
+        }, 500);
+        
+      } else {
+        console.log(`❌ Image failed for task ${taskId}:`, result.msg);
+        setSceneImageResults(prev => 
+          prev.map(r => 
+            r.taskId === taskId
+              ? { ...r, status: 'failed', error: result.msg || 'Generation failed' }
+              : r
+          )
+        );
+      }
+    } catch (error) {
+      console.error(`❌ Error polling for image task ${taskId}:`, error);
+      setSceneImageResults(prev => 
+        prev.map(r => 
+          r.taskId === taskId
+            ? { ...r, status: 'failed', error: 'Polling timeout' }
+            : r
+        )
+      );
+    }
+  };
+
+  const pollForVideoResult = async (taskId: string) => {
+    try {
+      console.log(`🔄 Starting polling for video task: ${taskId}`);
+      const result = await pollVideoResult(taskId);
+      
+      if (result.code === 200 && result.data?.video_url) {
+        console.log(`✅ Video completed for task ${taskId}:`, result.data.video_url);
+        setSceneVideoResults(prev => 
+          prev.map(r => 
+            r.taskId === taskId
+              ? { 
+                  ...r, 
+                  status: 'completed', 
+                  videoUrl: result.data.video_url,
+                  coverImageUrl: result.data.image_url 
+                }
+              : r
+          )
+        );
+        
+        // Check if all videos are completed
+        setTimeout(() => {
+          setSceneVideoResults(current => {
+            const allCompleted = current.every(r => r.status === 'completed');
+            if (allCompleted && current.length > 0) {
+              console.log('✅ All videos completed!');
+              updateProgress(4); // Move to music step
+            }
+            return current;
+          });
+        }, 500);
+        
+      } else {
+        console.log(`❌ Video failed for task ${taskId}:`, result.msg);
+        setSceneVideoResults(prev => 
+          prev.map(r => 
+            r.taskId === taskId
+              ? { ...r, status: 'failed', error: result.msg || 'Generation failed' }
+              : r
+          )
+        );
+      }
+    } catch (error) {
+      console.error(`❌ Error polling for video task ${taskId}:`, error);
+      setSceneVideoResults(prev => 
+        prev.map(r => 
+          r.taskId === taskId
+            ? { ...r, status: 'failed', error: 'Polling timeout' }
+            : r
+        )
+      );
+    }
+  };
+
+
 
   // Update timeline progress
   useEffect(() => {
@@ -241,12 +397,72 @@ export default function LuxuryScriptGenerator() {
     return null
   }
 
-  // Search for music
-  const searchMusic = async (query: string = 'fearless motivation instrumentals') => {
-    console.log('🎵 Starting music search for:', query)
+
+  // Get AI-powered music recommendations based on script content
+  const getScriptBasedMusic = async (script: string, famousPerson?: string) => {
+    console.log('🤖 Getting AI-powered music recommendations for script')
     setIsLoadingMusic(true)
     try {
-      const response = await fetch(`/api/music-recommendations?query=${encodeURIComponent(query)}&limit=12`)
+      const response = await fetch('/api/script-music-recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          script: script,
+          famousPerson: famousPerson
+        })
+      })
+      
+      if (!response.ok) throw new Error('Failed to get AI music recommendations')
+      
+      const data = await response.json()
+      console.log('🤖 AI Music Recommendations:', data)
+      
+      // Transform the API response to match our interface
+      const tracks: MusicTrack[] = data.videos?.map((track: { 
+        id?: string; 
+        name?: string; 
+        url?: string; 
+        thumbnail?: string; 
+        duration?: string;
+        views?: number;
+        artist?: string;
+      }, index: number) => ({
+        id: track.id ? `${track.id}-${index}` : `track-${index}`,
+        title: track.name || 'Unknown Title',
+        artist: track.artist || 'Unknown Artist',
+        thumbnail: track.thumbnail || '/video-placeholder.png',
+        duration: track.duration || '0:00',
+        url: track.url || '#'
+      })) || []
+      
+      setMusicTracks(tracks)
+      return data.mood // Return the detected mood for UI feedback
+    } catch (error) {
+      console.error('🤖 Error getting AI music recommendations:', error)
+      // Fallback to standard music search
+      await searchMusic(undefined, 'motivational')
+      return 'motivational'
+    } finally {
+      setIsLoadingMusic(false)
+    }
+  }
+
+  // Search for music by query or mood (fallback method)
+  const searchMusic = async (query?: string, mood?: string) => {
+    const searchType = mood ? `mood: ${mood}` : `query: ${query}`
+    console.log('🎵 Starting music search for:', searchType)
+    setIsLoadingMusic(true)
+    try {
+      let url = '/api/music-recommendations?limit=12'
+      if (mood) {
+        url += `&mood=${encodeURIComponent(mood)}`
+      } else if (query) {
+        url += `&query=${encodeURIComponent(query)}`
+      }
+      
+      const response = await fetch(url)
       console.log('🎵 Response status:', response.status, response.ok)
       
       if (!response.ok) throw new Error('Failed to fetch music')
@@ -264,7 +480,7 @@ export default function LuxuryScriptGenerator() {
         views?: number;
         artist?: string;
       }, index: number) => ({
-        id: track.id || `track-${index}`,
+        id: track.id ? `${track.id}-${index}` : `track-${index}`,
         title: track.name || 'Unknown Title',
         artist: track.artist || 'Unknown Artist',
         thumbnail: track.thumbnail || '/video-placeholder.png',
@@ -280,49 +496,35 @@ export default function LuxuryScriptGenerator() {
     }
   }
 
-  // Load standard music recommendations on component mount
-  const loadStandardMusic = async () => {
-    await searchMusic('fearless motivation instrumentals')
-  }
 
   // Enhanced onReady handler for YouTube events
   const handlePlayerReady = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     console.log('🎵 YouTube player initialized successfully')
     const player = event.target as YoutubePlayer
     setPlayerInstance(player)
-    setIsPlayerReady(true)
     
-    // Only auto-play on desktop, mobile requires user interaction
-    if (!isMobile && shouldAutoPlay && selectedTrack) {
-      setTimeout(() => {
-        try {
-          player.playVideo()
-          setIsPlaying(true)
-          setShouldAutoPlay(false) // Reset flag immediately
-          console.log('🎵 Auto-play successful on desktop')
-        } catch (error) {
-          console.log('🎵 Auto-play failed in ready handler:', error)
-          setShouldAutoPlay(false)
-        }
-      }, 300)
-    } else if (isMobile) {
-      // Reset auto-play flag on mobile
-      setShouldAutoPlay(false)
-      console.log('🎵 Player ready on mobile - auto-play disabled')
+    // Immediately prepare the video for better mobile compatibility
+    if (selectedTrack) {
+      const videoId = extractVideoId(selectedTrack.url)
+      if (videoId) {
+        // Video will be loaded when user clicks play
+      }
     }
+    
+    setIsPlayerReady(true)
+    console.log('🎵 Player ready for manual interaction')
+    
   }
 
-  // Simplified play function to prevent auto-pausing issues
-  const handlePlayMusicWithRetry = async () => {
+  // Enhanced play function with better mobile handling
+  const handlePlayMusicWithRetry = () => {
     if (!selectedTrack || !playingVideoId) {
       console.log('🎵 No track selected')
       return
     }
 
     console.log('🎵 Play/Pause button clicked for:', selectedTrack.title)
-    
-    // Always reset auto-play flag when user manually clicks play
-    setShouldAutoPlay(false)
+    console.log('🎵 Player ready status:', isPlayerReady)
     
     // If currently playing, pause it
     if (isPlaying && playerInstance) {
@@ -338,36 +540,27 @@ export default function LuxuryScriptGenerator() {
       }
     }
 
-    // If not playing, try to play
-    if (!playerInstance) {
-      console.log('🎵 Player not ready yet, please wait a moment and try again')
+    // Check if player is ready
+    if (!playerInstance || !isPlayerReady) {
+      console.log('🎵 Player not ready yet. Instance:', !!playerInstance, 'Ready:', isPlayerReady)
       return
     }
 
+    // Try to play immediately - this should work on first click now
     try {
       console.log('🎵 Starting playback...')
-      // Don't set isPlaying here - let the onPlay event handle it
-      await playerInstance.playVideo()
-      console.log('🎵 Play command sent to player')
+      playerInstance.playVideo()
+      console.log('🎵 Play command sent successfully')
     } catch (error) {
       console.log('🎵 Play failed:', error)
-      // Try once more after a short delay
-      setTimeout(async () => {
-        try {
-          console.log('🎵 Retrying play...')
-          await playerInstance.playVideo()
-        } catch (retryError) {
-          console.log('🎵 Retry failed:', retryError)
-        }
-      }, 1000)
     }
   }
 
 
 
-  // Select track without playing - for card clicks
+  // Select track without auto-play - manual control only
   const selectTrackOnly = (track: MusicTrack) => {
-    console.log('🎵 Selecting track (no auto-play):', track.title)
+    console.log('🎵 Selecting track:', track.title)
     
     const videoId = extractVideoId(track.url)
     if (!videoId) {
@@ -384,14 +577,13 @@ export default function LuxuryScriptGenerator() {
     setSelectedTrack(track)
     setIsPlaying(false)
     
-    // Never auto-play when selecting via card click
-    setShouldAutoPlay(false)
     
     // Reset timeline for new track
     setCurrentTime(0)
     setTrackDuration(0)
     setIsSeeking(false)
     setIsPlayerReady(false)
+    setPlayerInstance(null)
     
     // Always recreate player for new track to ensure clean state
     setPlayingVideoId(videoId)
@@ -627,6 +819,10 @@ ${person.name.toUpperCase()} STYLE CHARACTERISTICS:`
       setGeneratedScript(script)
       updateProgress(2) // Voice generation step
 
+      // Automatically get AI-powered music recommendations based on the script
+      console.log('🤖 Auto-generating music recommendations for script')
+      getScriptBasedMusic(script, selectedPerson.name)
+
     } catch (error) {
       console.error('Error generating script:', error)
     } finally {
@@ -685,12 +881,192 @@ Return ONLY the optimized script, ready for voice generation.`
       
       setCustomScript(optimizedScript)
 
+      // Get AI-powered music recommendations for the optimized script
+      console.log('🤖 Auto-generating music recommendations for optimized script')
+      getScriptBasedMusic(optimizedScript, selectedPerson.name)
+
     } catch (error) {
       console.error('Error optimizing script:', error)
     } finally {
       setIsOptimizingScript(false)
     }
   }
+
+  // Polling mechanism for status updates
+  const startPollingForImageResults = async (imageResults: SceneImageResult[]) => {
+    const pendingTasks = imageResults.filter(r => r.status === 'pending');
+    if (pendingTasks.length === 0) return;
+    
+    console.log(`🔄 Polling for ${pendingTasks.length} pending image tasks...`);
+    
+    for (const task of pendingTasks) {
+      try {
+        const response = await fetch(`/api/kie-status?taskId=${task.taskId}`);
+        const result = await response.json();
+        
+        if (result.success && result.data?.data) {
+          const taskData = result.data.data;
+          console.log(`📊 Task ${task.taskId} status:`, taskData.successFlag, taskData.response);
+          
+          if (taskData.successFlag === 1 && taskData.response?.resultImageUrl) {
+            // Success
+            console.log(`✅ Image ready for task ${task.taskId}:`, taskData.response.resultImageUrl);
+            setSceneImageResults(prev => 
+              prev.map(result => 
+                result.taskId === task.taskId
+                  ? { ...result, status: 'completed', imageUrl: taskData.response.resultImageUrl }
+                  : result
+              )
+            );
+          } else if (taskData.successFlag === 2 || taskData.successFlag === 3) {
+            // Failed
+            console.log(`❌ Image failed for task ${task.taskId}:`, taskData.errorMessage);
+            setSceneImageResults(prev => 
+              prev.map(result => 
+                result.taskId === task.taskId
+                  ? { ...result, status: 'failed', error: taskData.errorMessage || 'Generation failed' }
+                  : result
+              )
+            );
+          }
+        }
+      } catch (error) {
+        console.error(`Error polling task ${task.taskId}:`, error);
+      }
+    }
+    
+    // Check if we need to continue polling
+    setSceneImageResults(current => {
+      const stillPending = current.filter(r => r.status === 'pending');
+      if (stillPending.length > 0) {
+        console.log(`🔄 ${stillPending.length} tasks still pending, continuing to poll...`);
+        setTimeout(() => startPollingForImageResults(current), 5000);
+      } else {
+        console.log('🎉 All image tasks completed!');
+        const allCompleted = current.every(r => r.status === 'completed');
+        if (allCompleted && current.length > 0) {
+          console.log('🎬 Starting video generation...');
+          setTimeout(() => {
+            handleGenerateVideos();
+          }, 1000);
+        }
+      }
+      return current;
+    });
+  };
+
+  // Get voice duration from audio element
+  const updateVoiceDuration = () => {
+    if (audioRef.current) {
+      const duration = audioRef.current.duration;
+      if (!isNaN(duration) && duration > 0) {
+        setVoiceDuration(duration);
+        console.log('Voice duration updated:', duration, 'seconds');
+      }
+    }
+  };
+
+  // Scene generation functions
+  const handleGenerateScenes = async () => {
+    if (!generatedScript) {
+      console.log('No script available for scene generation');
+      return;
+    }
+
+    setIsGeneratingScenes(true);
+    setScenes([]);
+    setSceneImageResults([]);
+    setSceneVideoResults([]);
+
+    try {
+      console.log('Generating scenes for script...');
+      
+      const response = await fetch('/api/generate-scenes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          script: generatedScript,
+          voiceUrl: audioUrl,
+          voiceDuration: voiceDuration
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to generate scenes');
+      
+      const data = await response.json();
+      
+      if (!data.success || !data.data?.scenes) {
+        throw new Error('No scenes generated');
+      }
+      
+      setScenes(data.data.scenes);
+      console.log(`Generated ${data.data.scenes.length} scenes successfully`);
+      
+      // Start image generation automatically
+      setTimeout(() => handleGenerateImages(data.data.scenes), 1000);
+
+    } catch (error) {
+      console.error('Error generating scenes:', error);
+    } finally {
+      setIsGeneratingScenes(false);
+    }
+  };
+
+  const handleGenerateImages = async (scenesToUse?: Scene[]) => {
+    const currentScenes = scenesToUse || scenes;
+    if (!currentScenes || currentScenes.length === 0) {
+      console.log('No scenes available for image generation');
+      return;
+    }
+
+    setIsGeneratingImages(true);
+    setSceneImageResults([]);
+
+    try {
+      console.log(`Starting image generation for ${currentScenes.length} scenes...`);
+      
+      const response = await fetch('/api/generate-scene-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          scenes: currentScenes,
+          userId: 'user' // Could be from auth context
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to start image generation');
+      
+      const data = await response.json();
+      
+      if (!data.success || !data.data?.imageResults) {
+        throw new Error('No image generation tasks started');
+      }
+      
+      // Initialize image results with pending status
+      const imageResults: SceneImageResult[] = data.data.imageResults.map((result: any) => ({
+        sceneId: result.sceneId,
+        taskId: result.taskId,
+        status: result.success ? 'pending' : 'failed',
+        error: result.error
+      }));
+      
+      setSceneImageResults(imageResults);
+      console.log(`Started ${data.data.successCount} image generation tasks`);
+      console.log('Stored task IDs:', imageResults.map(r => ({ sceneId: r.sceneId, taskId: r.taskId })));
+      
+      // Start polling for all image results
+      console.log('🔄 Starting polling for image results...');
+      imageResults.forEach((result) => {
+        if (result.status === 'pending') {
+          setTimeout(() => pollForImageResult(result.taskId), 2000);
+        }
+      });
+
+    } catch (error) {
+      console.error('Error starting image generation:', error);
+      setIsGeneratingImages(false);
+    }
+  };
 
   // Handle voice generation (simplified for single script)
   const handleGenerateVoice = async () => {
@@ -723,9 +1099,10 @@ Return ONLY the optimized script, ready for voice generation.`
       const url = URL.createObjectURL(audioBlob)
       setAudioUrl(url)
       
-      // Load music after voice generation
-      await loadStandardMusic()
-      updateProgress(3) // Music selection step
+      updateProgress(3) // Scene generation step
+      
+      // Get voice duration after a short delay to allow audio to load
+      setTimeout(updateVoiceDuration, 1000)
       
     } catch (error) {
       console.error('Error generating voice:', error)
@@ -818,7 +1195,7 @@ Return ONLY the optimized script, ready for voice generation.`
               currentStep >= 3 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-white/20'
             }`}></div>
 
-            {/* Step 4: Music Selection */}
+            {/* Step 4: Scene Generation */}
             <div className="flex items-center gap-1 sm:gap-2">
               <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
                 currentStep >= 3 
@@ -829,6 +1206,27 @@ Return ONLY the optimized script, ready for voice generation.`
               </div>
               <span className={`text-xs sm:text-sm font-medium transition-all duration-300 hidden sm:inline ${
                 currentStep >= 3 ? 'text-white' : 'text-white/60'
+              }`}>
+                Scenes
+              </span>
+            </div>
+
+            {/* Connection Line */}
+            <div className={`w-4 sm:w-8 md:w-16 h-0.5 sm:h-1 rounded-full transition-all duration-500 ${
+              currentStep >= 4 ? 'bg-gradient-to-r from-green-500 to-green-400' : 'bg-white/20'
+            }`}></div>
+
+            {/* Step 5: Music Selection */}
+            <div className="flex items-center gap-1 sm:gap-2">
+              <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold border-2 transition-all duration-300 shadow-lg ${
+                currentStep >= 4 
+                  ? 'bg-green-500/20 border-green-500 text-green-300 shadow-green-500/20' 
+                  : 'bg-white/10 border-white/20 text-white/60'
+              }`}>
+                5
+              </div>
+              <span className={`text-xs sm:text-sm font-medium transition-all duration-300 hidden sm:inline ${
+                currentStep >= 4 ? 'text-white' : 'text-white/60'
               }`}>
                 Music
               </span>
@@ -1198,6 +1596,10 @@ Return ONLY the optimized script, ready for voice generation.`
                       }
                       setGeneratedScript(customScript.trim())
                       updateProgress(2) // Voice generation step
+                      
+                      // Get AI-powered music recommendations for the custom script
+                      console.log('🤖 Auto-generating music recommendations for custom script')
+                      getScriptBasedMusic(customScript.trim(), selectedPerson?.name || 'General')
                     }}
                     disabled={!selectedPerson || !customScript.trim()}
                     className="w-full bg-white/20 hover:bg-white/30 border border-white/30 hover:border-white/50 text-white font-medium py-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1550,6 +1952,8 @@ Return ONLY the optimized script, ready for voice generation.`
                             src={audioUrl}
                             className="w-full"
                             controls
+                            onLoadedMetadata={updateVoiceDuration}
+                            onCanPlay={updateVoiceDuration}
                           />
                         </div>
                         
@@ -1586,13 +1990,205 @@ Return ONLY the optimized script, ready for voice generation.`
 
 
 
-        {/* Music Search and Player Section - Only show after voice is generated */}
+        {/* Scene Generation Section - Only show after voice is generated */}
         {audioUrl && (
-          <div ref={musicSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mt-8 rounded-2xl overflow-hidden">
+          <div ref={sceneSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mb-8 rounded-2xl overflow-hidden">
             <div className="p-6">
               <h3 className="text-white flex items-center gap-3 text-base font-medium mb-4">
                 <div className="w-7 h-7 bg-white/10 text-white/60 rounded-full flex items-center justify-center text-xs font-medium border border-white/20">
                   4
+                </div>
+                <span>Generate Visual Scenes</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <div className="flex items-center gap-1 text-xs text-blue-400">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                    Polling Mode
+                  </div>
+                </div>
+              </h3>
+              <p className="text-white/60 text-sm mt-2">
+                Generate consistent visual scenes for your video using AI image and video generation (9:16 format, 5 seconds each)
+              </p>
+            </div>
+            
+            <div className="px-6 pb-6">
+              {/* Generate Scenes Button */}
+              {scenes.length === 0 && (
+                <Button 
+                  onClick={handleGenerateScenes}
+                  disabled={isGeneratingScenes || !generatedScript}
+                  className="w-full bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 hover:border-purple-500/50 text-white font-medium py-4 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingScenes ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Generating Scenes with AI...
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Camera className="w-5 h-5" />
+                      Generate Visual Scenes
+                    </div>
+                  )}
+                </Button>
+              )}
+
+              {/* Scenes Display */}
+              {scenes.length > 0 && (
+                <div className="space-y-6">
+                  <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-lg">🎬</span>
+                      <h4 className="text-sm font-medium text-purple-300">Generated {scenes.length} Scenes</h4>
+                    </div>
+                    <p className="text-xs text-white/60">
+                      Each scene will be converted to a 9:16 image and then to a 5-second video clip
+                    </p>
+                  </div>
+
+                  {/* Scene List */}
+                  <div className="grid gap-4">
+                    {scenes.map((scene) => {
+                      const imageResult = sceneImageResults.find(r => r.sceneId === scene.id);
+                      const videoResult = sceneVideoResults.find(r => r.sceneId === scene.id);
+                      
+                      return (
+                        <div key={scene.id} className="bg-white/5 border border-white/10 rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <h5 className="text-white font-medium text-sm mb-1">
+                                Scene {scene.id}: {scene.description}
+                              </h5>
+                              <p className="text-xs text-white/50 mb-2">{scene.timing} • {scene.cameraMovement}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {/* Image Status */}
+                              <div className={`px-2 py-1 rounded text-xs font-medium ${
+                                imageResult?.status === 'completed' 
+                                  ? 'bg-green-500/20 text-green-300' 
+                                  : imageResult?.status === 'pending'
+                                  ? 'bg-yellow-500/20 text-yellow-300'
+                                  : imageResult?.status === 'failed'
+                                  ? 'bg-red-500/20 text-red-300'
+                                  : 'bg-gray-500/20 text-gray-400'
+                              }`}>
+                                📷 {imageResult?.status === 'completed' ? 'Image Ready' : 
+                                     imageResult?.status === 'pending' ? 'Generating...' :
+                                     imageResult?.status === 'failed' ? 'Failed' : 'Waiting'}
+                              </div>
+                              
+                              {/* Video Status */}
+                              <div className={`px-2 py-1 rounded text-xs font-medium ${
+                                videoResult?.status === 'completed' 
+                                  ? 'bg-green-500/20 text-green-300' 
+                                  : videoResult?.status === 'pending'
+                                  ? 'bg-yellow-500/20 text-yellow-300'
+                                  : videoResult?.status === 'failed'
+                                  ? 'bg-red-500/20 text-red-300'
+                                  : 'bg-gray-500/20 text-gray-400'
+                              }`}>
+                                🎥 {videoResult?.status === 'completed' ? 'Video Ready' : 
+                                     videoResult?.status === 'pending' ? 'Generating...' :
+                                     videoResult?.status === 'failed' ? 'Failed' : 'Waiting'}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="bg-black/30 rounded p-3 mb-3">
+                            <p className="text-white/80 text-xs leading-relaxed">{scene.prompt}</p>
+                          </div>
+
+                          {/* Generated Content Display */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {/* Generated Image */}
+                            {imageResult?.imageUrl && (
+                              <div className="space-y-2">
+                                <h6 className="text-xs font-medium text-white/70">Generated Image:</h6>
+                                <div className="aspect-[9/16] bg-black/20 rounded-lg overflow-hidden border border-white/10">
+                                  <Image
+                                    src={imageResult.imageUrl}
+                                    alt={`Scene ${scene.id}`}
+                                    width={180}
+                                    height={320}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Generated Video */}
+                            {videoResult?.videoUrl && (
+                              <div className="space-y-2">
+                                <h6 className="text-xs font-medium text-white/70">Generated Video:</h6>
+                                <div className="aspect-[9/16] bg-black/20 rounded-lg overflow-hidden border border-white/10">
+                                  <video
+                                    src={videoResult.videoUrl}
+                                    controls
+                                    className="w-full h-full object-cover"
+                                    poster={videoResult.coverImageUrl}
+                                  />
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    const link = document.createElement('a');
+                                    link.href = videoResult.videoUrl!;
+                                    link.download = `scene-${scene.id}-video.mp4`;
+                                    link.click();
+                                  }}
+                                  className="w-full bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 text-blue-300 text-xs px-3 py-2"
+                                >
+                                  <Download className="w-3 h-3 mr-1" />
+                                  Download Video
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Generation Progress */}
+                  {(isGeneratingImages || isGeneratingVideos) && (
+                    <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-4 h-4 border-2 border-blue-300/30 border-t-blue-300 rounded-full animate-spin"></div>
+                        <h4 className="text-sm font-medium text-blue-300">
+                          {isGeneratingImages && !isGeneratingVideos && 'Generating Images...'}
+                          {!isGeneratingImages && isGeneratingVideos && 'Generating Videos...'}
+                          {isGeneratingImages && isGeneratingVideos && 'Processing Scenes...'}
+                        </h4>
+                      </div>
+                      <p className="text-xs text-white/60">
+                        This may take several minutes. Progress will update automatically via polling.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Regenerate Button */}
+                  {scenes.length > 0 && !isGeneratingScenes && !isGeneratingImages && !isGeneratingVideos && (
+                    <Button 
+                      onClick={handleGenerateScenes}
+                      className="w-full bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 text-white font-medium py-3 rounded-xl transition-all duration-200"
+                    >
+                      <Film className="w-4 h-4 mr-2" />
+                      Regenerate All Scenes
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Music Search and Player Section - Only show after scenes are completed */}
+        {audioUrl && currentStep >= 4 && (
+          <div ref={musicSectionRef} className="bg-black/30 backdrop-blur-md border border-white/20 shadow-2xl mt-8 rounded-2xl overflow-hidden">
+            <div className="p-6">
+              <h3 className="text-white flex items-center gap-3 text-base font-medium mb-4">
+                <div className="w-7 h-7 bg-white/10 text-white/60 rounded-full flex items-center justify-center text-xs font-medium border border-white/20">
+                  5
                 </div>
                 <span>Add Background Music</span>
               </h3>
@@ -1602,60 +2198,42 @@ Return ONLY the optimized script, ready for voice generation.`
             </div>
             <div className="px-6 pb-6">
 
-            {/* Music Categories */}
+            {/* Optional Manual Search */}
             <div className="mb-6">
-              <h4 className="text-white/80 text-sm font-medium mb-4">Music Categories - Choose your vibe</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {[
-                  { label: 'Fearless Motivation', query: 'fearless motivation instrumentals' },
-                  { label: 'Epic After AShamaluevMusic', query: 'AShamaluevMusic epic' },
-                  { label: 'Legendary Secession', query: 'secession studios' }
-                ].map((category) => (
-                  <Button
-                    key={category.label}
-                    onClick={() => searchMusic(category.query)}
-                    disabled={isLoadingMusic}
-                    className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white/70 hover:text-white text-xs px-3 py-2 h-auto rounded-lg font-normal"
-                  >
-                    {category.label}
-                  </Button>
-                ))}
+              <h4 className="text-white/80 text-sm font-medium mb-3">Or Search Manually</h4>
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/30 w-4 h-4" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        searchMusic(searchQuery || 'motivational music')
+                      }
+                    }}
+                    placeholder="Search for specific background music..."
+                    className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-3 pl-10 focus:border-white/20 focus:bg-white/10 focus:outline-none transition-all duration-200 placeholder:text-white/40"
+                  />
+                </div>
+                <Button
+                  onClick={() => searchMusic(searchQuery || 'motivational music')}
+                  disabled={isLoadingMusic}
+                  className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 rounded-lg"
+                >
+                  {isLoadingMusic ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <Search className="w-4 h-4" />
+                  )}
+                </Button>
               </div>
-            </div>
-
-            {/* Search Bar */}
-            <div className="flex gap-3 mb-8">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/30 w-4 h-4" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      searchMusic(searchQuery || 'fearless motivation instrumentals')
-                    }
-                  }}
-                  placeholder="Search for background music..."
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-4 py-3 pl-10 focus:border-white/20 focus:bg-white/10 focus:outline-none transition-all duration-200 placeholder:text-white/40"
-                />
-              </div>
-              <Button
-                onClick={() => searchMusic(searchQuery || 'fearless motivation instrumentals')}
-                disabled={isLoadingMusic}
-                className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-6 rounded-lg"
-              >
-                {isLoadingMusic ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                ) : (
-                  <Search className="w-4 h-4" />
-                )}
-              </Button>
             </div>
 
             {/* Hidden YouTube Player for background music - Mobile Optimized */}
             {playingVideoId && (
-              <div className="hidden">
+              <div className="opacity-0 pointer-events-none">
                 <YouTube
                   key={`${playingVideoId}-${playerKey}`}
                   videoId={playingVideoId}
@@ -1664,15 +2242,15 @@ Return ONLY the optimized script, ready for voice generation.`
                     height: '1',
                     playerVars: {
                       // Mobile-optimized settings
-                      autoplay: isMobile ? 0 : 0, // Always 0 for mobile compatibility
-                      enablejsapi: 1,
-                      controls: 0,
+                      autoplay: 0 as const, // Always 0 for mobile compatibility
+                      enablejsapi: 1 as const,
+                      controls: 0 as const,
                       disablekb: 1,
                       iv_load_policy: 3,
                       modestbranding: 1,
                       rel: 0,
                       fs: 0,
-                      playsinline: 1, // Critical for mobile
+                      playsinline: 1 as const, // Critical for mobile
                       // Additional mobile optimization
                       origin: typeof window !== 'undefined' ? window.location.origin : '',
                       widget_referrer: typeof window !== 'undefined' ? window.location.origin : '',
@@ -1682,7 +2260,6 @@ Return ONLY the optimized script, ready for voice generation.`
                   onPlay={() => {
                     console.log('🎵 YouTube Music player started playing')
                     setIsPlaying(true)
-                    setShouldAutoPlay(false)
                   }}
                   onPause={() => {
                     console.log('🎵 YouTube Music player paused')
@@ -1691,7 +2268,6 @@ Return ONLY the optimized script, ready for voice generation.`
                   onEnd={() => {
                     console.log('🎵 YouTube Music player ended')
                     setIsPlaying(false)
-                    setShouldAutoPlay(false)
                   }}
                   onError={(error) => {
                     const playerError = error as YouTubePlayerError;
@@ -1706,7 +2282,6 @@ Return ONLY the optimized script, ready for voice generation.`
                     
                     setIsPlaying(false)
                     setIsPlayerReady(false)
-                    setShouldAutoPlay(false)
                   }}
                 />
               </div>
@@ -1727,7 +2302,7 @@ Return ONLY the optimized script, ready for voice generation.`
                   <span className="text-xs text-white/50">{musicTracks.length} tracks found</span>
                 </div>
 
-                <div className="space-y-2 sm:space-y-3 max-h-80 sm:max-h-96 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
+                <div className="space-y-2 sm:space-y-3 max-h-80 sm:max-h-96 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar px-2">
                   {musicTracks.map((track) => (
                     <div
                       key={track.id}
@@ -1737,10 +2312,16 @@ Return ONLY the optimized script, ready for voice generation.`
                           return
                         }
                         
-                        // Only select the track, never trigger play/pause
+                        // If track is already selected, do nothing (no play/pause toggle)
+                        if (selectedTrack?.id === track.id) {
+                          console.log('🎵 Track already selected, use play button to control')
+                          return
+                        }
+                        
+                        // Only select new tracks (which will auto-play)
                         selectTrackOnly(track)
                       }}
-                      className={`p-3 sm:p-4 rounded-lg border cursor-pointer transition-all duration-200 ${
+                      className={`p-3 sm:p-4 rounded-lg border cursor-pointer transition-all duration-300 ${
                         selectedTrack?.id === track.id
                           ? 'bg-green-500/10 border-green-500/30 ring-1 ring-green-500/20'
                           : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/8 active:bg-white/12'
@@ -1748,10 +2329,10 @@ Return ONLY the optimized script, ready for voice generation.`
                     >
                       <div className="flex items-center gap-3 sm:gap-4">
                         {/* Track Thumbnail */}
-                        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 border transition-all duration-200 ${
+                        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 border transition-all duration-300 transform ${
                           selectedTrack?.id === track.id 
-                            ? 'border-green-500/40 ring-1 ring-green-500/20 shadow-lg shadow-green-500/10' 
-                            : 'border-white/10'
+                            ? 'border-green-500/40 ring-1 ring-green-500/20 scale-105' 
+                            : 'border-white/10 hover:border-white/20'
                         }`}>
                           <Image
                             src={track.thumbnail}
@@ -1793,40 +2374,42 @@ Return ONLY the optimized script, ready for voice generation.`
                         {/* Action Button - Only show when track is selected */}
                         {selectedTrack?.id === track.id ? (
                           <div className="flex items-center">
-                            <Button
-                              size="sm"
-                              onClick={async (e) => {
-                                e.stopPropagation()
-                                
-                                console.log('🎵 Play button clicked')
-                                await handlePlayMusicWithRetry()
-                              }}
-                              className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
-                                playingVideoId && isPlaying
-                                  ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
-                                  : 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
-                              }`}
-                            >
-                              {playingVideoId && isPlaying ? (
+                            {isPlayerReady ? (
+                              <Button
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  
+                                  console.log('🎵 Play button clicked')
+                                  handlePlayMusicWithRetry()
+                                }}
+                                className={`text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium transition-all duration-200 min-w-[80px] sm:min-w-[90px] ${
+                                  playingVideoId && isPlaying
+                                    ? 'bg-green-500/30 hover:bg-green-500/40 border-2 border-green-400/60 text-green-200 shadow-lg shadow-green-500/20'
+                                    : 'bg-blue-500/30 hover:bg-blue-500/40 border-2 border-blue-400/60 text-blue-200 shadow-lg shadow-blue-500/20'
+                                }`}
+                              >
+                                {playingVideoId && isPlaying ? (
+                                  <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                    <Pause className="w-4 h-4" />
+                                    <span className="font-semibold">PAUSE</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-center gap-1 sm:gap-2">
+                                    <Play className="w-4 h-4" />
+                                    <span className="font-semibold">PLAY</span>
+                                  </div>
+                                )}
+                              </Button>
+                            ) : (
+                              <div className="text-xs sm:text-sm px-4 sm:px-5 py-2.5 sm:py-3 rounded-full font-medium min-w-[80px] sm:min-w-[90px] opacity-0 pointer-events-none">
+                                {/* Invisible placeholder to maintain layout */}
                                 <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                  <Pause className="w-4 h-4" />
-                                  <span className="font-semibold">PAUSE</span>
-                                </div>
-                              ) : (
-                                <div className={`flex items-center justify-center gap-1 sm:gap-2 transition-all duration-300 ${
-                                  (!isMobile && shouldAutoPlay && playingVideoId === extractVideoId(track.url)) 
-                                    ? 'animate-pulse' 
-                                    : ''
-                                }`}>
-                                  <Play className={`w-4 h-4 transition-transform duration-300 ${
-                                    (!isMobile && shouldAutoPlay && playingVideoId === extractVideoId(track.url))
-                                      ? 'animate-pulse scale-110'
-                                      : ''
-                                  }`} />
+                                  <Play className="w-4 h-4" />
                                   <span className="font-semibold">PLAY</span>
                                 </div>
-                              )}
-                            </Button>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="flex items-center">
