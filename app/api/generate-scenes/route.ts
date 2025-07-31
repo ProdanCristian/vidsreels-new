@@ -116,7 +116,7 @@ Generate scenes that will create a compelling visual narrative for this script. 
     }
 
     // Enhance each scene prompt for better AI generation
-    sceneData.scenes = sceneData.scenes.map((scene: any, index: number) => ({
+    sceneData.scenes = sceneData.scenes.map((scene: { prompt?: string; description?: string; cameraMovement?: string; timing?: string }, index: number) => ({
       ...scene,
       id: index + 1,
       duration: 5, // Fixed 5-second duration

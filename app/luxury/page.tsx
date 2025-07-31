@@ -171,7 +171,7 @@ export default function LuxuryScriptGenerator() {
       }
       
       // Initialize video results with pending status
-      const videoResults: SceneVideoResult[] = data.data.videoResults.map((result: any) => ({
+      const videoResults: SceneVideoResult[] = data.data.videoResults.map((result: { sceneId: number; videoTaskId: string; success: boolean; error?: string }) => ({
         sceneId: result.sceneId,
         taskId: result.videoTaskId,
         status: result.success ? 'pending' : 'failed',
@@ -199,14 +199,14 @@ export default function LuxuryScriptGenerator() {
   const pollForImageResult = async (taskId: string) => {
     try {
       console.log(`🔄 Starting polling for image task: ${taskId}`);
-      const result = await pollImageResult(taskId) as any;
+      const result = await pollImageResult(taskId) as { code: number; data?: { info?: { resultImageUrl?: string } }; msg?: string };
       
       if (result.code === 200 && result.data?.info?.resultImageUrl) {
-        console.log(`✅ Image completed for task ${taskId}:`, result.data.info.resultImageUrl);
+        console.log(`✅ Image completed for task ${taskId}:`, result.data?.info?.resultImageUrl);
         setSceneImageResults(prev => 
           prev.map(r => 
             r.taskId === taskId
-              ? { ...r, status: 'completed', imageUrl: result.data.info.resultImageUrl }
+              ? { ...r, status: 'completed', imageUrl: result.data?.info?.resultImageUrl }
               : r
           )
         );
@@ -248,7 +248,7 @@ export default function LuxuryScriptGenerator() {
   const pollForVideoResult = async (taskId: string) => {
     try {
       console.log(`🔄 Starting polling for video task: ${taskId}`);
-      const result = await pollVideoResult(taskId) as any;
+      const result = await pollVideoResult(taskId) as { code: number; data?: { video_url?: string; image_url?: string }; msg?: string };
       
       if (result.code === 200 && result.data?.video_url) {
         console.log(`✅ Video completed for task ${taskId}:`, result.data.video_url);
@@ -258,8 +258,8 @@ export default function LuxuryScriptGenerator() {
               ? { 
                   ...r, 
                   status: 'completed', 
-                  videoUrl: result.data.video_url,
-                  coverImageUrl: result.data.image_url 
+                  videoUrl: result.data?.video_url,
+                  coverImageUrl: result.data?.image_url 
                 }
               : r
           )
@@ -981,7 +981,7 @@ Return ONLY the optimized script, ready for voice generation.`
       }
       
       // Initialize image results with pending status
-      const imageResults: SceneImageResult[] = data.data.imageResults.map((result: any) => ({
+      const imageResults: SceneImageResult[] = data.data.imageResults.map((result: { sceneId: number; taskId: string; success: boolean; error?: string }) => ({
         sceneId: result.sceneId,
         taskId: result.taskId,
         status: result.success ? 'pending' : 'failed',

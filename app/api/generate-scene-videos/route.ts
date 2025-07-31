@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     // Generate videos from images
     for (let i = 0; i < imageResults.length; i++) {
       const imageResult = imageResults[i];
-      const scene = scenes.find((s: any) => s.id === imageResult.sceneId);
+      const scene = scenes.find((s: { id: number }) => s.id === imageResult.sceneId);
       
       if (!imageResult.imageUrl || !scene) {
         console.log(`Skipping video generation for scene ${imageResult.sceneId} - missing image URL or scene data`);
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
           quality: '1080p', // High quality as requested
           aspectRatio: '9:16', // Vertical format
           waterMark: '', // No watermark
-          // Callback URL will be auto-set by the KIE client
+          callBackUrl: '' // Will be auto-set by the KIE client
         });
 
         videoGenerationTasks.push({

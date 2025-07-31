@@ -22,8 +22,8 @@ export function usePolling(
 
   const [isPolling, setIsPolling] = useState(false);
   const [attempts, setAttempts] = useState(0);
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+  const [data, setData] = useState<unknown>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const poll = useCallback(async () => {
     if (!url) return;
